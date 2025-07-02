@@ -614,18 +614,61 @@ const App: React.FC = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files && files[0]) {
-      const file = files[0];
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const result = e.target?.result;
-          if (result) {
-            await handleTakePhoto(result as string);
-          }
-        };
-        reader.readAsDataURL(file);
+    if (files && files.length > 0) {
+      const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/')).slice(0, 10);
+      
+      if (imageFiles.length === 0) {
+        setError('Please select valid image files');
+        return;
       }
+
+      if (files.length > 10) {
+        setError('Maximum 10 photos allowed. Only the first 10 will be processed.');
+      }
+
+      setAppState(AppState.AddingItem);
+      setIsAnalyzing(true);
+
+      for (const file of imageFiles) {
+        try {
+          const reader = new FileReader();
+          const photoPromise = new Promise<string>((resolve) => {
+            reader.onload = (e) => {
+              const result = e.target?.result;
+              if (result) {
+                resolve(result as string);
+              }
+            };
+          });
+          
+          reader.readAsDataURL(file);
+          const photo = await photoPromise;
+          
+          const analyzedItem = await analyzeClothingItem(photo);
+          
+          const wardrobeItem: InsertWardrobeItem = {
+            userId,
+            name: analyzedItem.name,
+            category: analyzedItem.category,
+            colors: analyzedItem.colors,
+            image: photo,
+            wearCount: 0,
+            occasions: analyzedItem.occasions || [],
+          };
+
+          await new Promise<void>((resolve, reject) => {
+            addItemMutation.mutate(wardrobeItem, {
+              onSuccess: () => resolve(),
+              onError: (error) => reject(error)
+            });
+          });
+        } catch (error) {
+          console.error('Error processing file:', file.name, error);
+        }
+      }
+      
+      setIsAnalyzing(false);
+      setAppState(AppState.Wardrobe);
     }
     event.target.value = '';
   };
@@ -756,10 +799,11 @@ const App: React.FC = () => {
               </button>
               <label className="flex-1 bg-purple-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-purple-700 transition-colors duration-300 flex items-center justify-center space-x-2 cursor-pointer">
                 <ImageIcon className="w-5 h-5" />
-                <span>Upload Image</span>
+                <span>Upload Photos</span>
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -772,10 +816,10 @@ const App: React.FC = () => {
         return (
           <div className="text-center p-10">
             <h2 className="text-2xl font-semibold text-gray-700 mb-4">
-              {isAnalyzing ? 'Analyzing your item...' : 'Adding to wardrobe...'}
+              {isAnalyzing ? 'Analyzing your items...' : 'Adding to wardrobe...'}
             </h2>
             <p className="text-gray-500 mb-6">
-              {isAnalyzing ? 'AI is identifying the clothing item and its details.' : 'Saving your item to the wardrobe.'}
+              {isAnalyzing ? 'AI is identifying clothing items and their details. This may take a moment for multiple photos.' : 'Saving your items to the wardrobe.'}
             </p>
             <LoadingSpinner />
           </div>
