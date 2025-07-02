@@ -1,0 +1,127 @@
+Outfit Composition: Each outfit must include a minimum of three items, including at least one accessory (e.g., scarf, hat, jewelry) and one jacket.
+
+
+
+Temperature Consideration: Outfits must be suitable for the specified temperature, ensuring comfort and practicality.
+
+
+
+Uniqueness: Each outfit must feature at least one unique item not repeated in other generated outfits.
+
+
+
+Generation Process: The outfit generation must involve at least three distinct steps to ensure thoughtful selection and coordination.
+
+Detailed Requirements
+
+
+
+
+
+Wardrobe Analysis:
+
+
+
+
+
+Analyze the user’s wardrobe to categorize items based on their suitability for different temperature ranges (e.g., warm: >25°C, mild: 15-25°C, cool: 5-15°C, cold: <5°C).
+
+
+
+Identify items that can be layered or adapted for varying weather conditions.
+
+
+
+Base Outfit Selection:
+
+
+
+
+
+Select a base outfit consisting of at least three items: a top (e.g., shirt, sweater), a bottom (e.g., pants, skirt), and an accessory.
+
+
+
+Ensure the accessory is temperature-appropriate (e.g., scarf or gloves for cold weather, sunglasses or a light hat for warm weather).
+
+
+
+Jacket Integration:
+
+
+
+
+
+Add a jacket that complements the base outfit in terms of style, color, and material.
+
+
+
+Ensure the jacket suits the specified temperature (e.g., a trench coat for mild weather, a parka for cold weather).
+
+
+
+Unique Item Inclusion:
+
+
+
+
+
+Incorporate at least one unique item in each outfit, such as a statement piece (e.g., a bold necklace, a patterned scarf) that distinguishes the outfit from others.
+
+
+
+Outfit Presentation:
+
+
+
+
+
+Present the generated outfit to the user with detailed descriptions of each item (e.g., "Navy wool sweater - warm and cozy for cold days").
+
+
+
+Provide explanations for why each item was chosen, considering temperature, occasion, and user style preferences.
+
+Additional Considerations
+
+
+
+
+
+User Preferences: Learn from the user’s past choices and feedback to tailor suggestions to their style and comfort.
+
+
+
+Occasion Suitability: Ensure outfits match specified occasions (e.g., casual outings, work, formal events).
+
+
+
+Weather Data Integration: Access real-time weather data or forecasts for the user’s location to inform temperature-based selections.
+
+
+
+Visual Appeal: Design an intuitive, visually appealing user interface for easy outfit viewing and selection.
+
+
+
+Privacy and Security: Securely handle personal data and wardrobe information, respecting user privacy.
+
+
+
+Diversity and Inclusivity: Support a wide range of wardrobe items, styles, body types, and cultural preferences.
+
+Technical Requirements
+
+
+
+
+
+Database Access: Use a database to store and retrieve wardrobe items, user preferences, and historical data.
+
+
+
+Image Recognition: Optionally, implement image recognition to identify and categorize wardrobe items from photos.
+
+
+
+Efficient Processing: Ensure quick outfit generation, even for large wardrobes, for a seamless user experience.
