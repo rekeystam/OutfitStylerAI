@@ -34,6 +34,18 @@ const ArrowPathIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const UploadIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+  </svg>
+);
+
+const ImageIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+
 // --- GEMINI SERVICE ---
 const getApiKey = () => {
   return import.meta.env.VITE_GEMINI_API_KEY || 
@@ -256,6 +268,27 @@ const App: React.FC = () => {
     setAppState(AppState.Capturing);
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      Array.from(files).forEach((file) => {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const result = e.target?.result;
+            if (result) {
+              setPhotos(prev => [...prev, result as string]);
+              setAppState(AppState.Capturing);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+    // Reset input value to allow uploading the same file again
+    event.target.value = '';
+  };
+
   const handleRemovePhoto = (indexToRemove: number) => {
     setPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
   };
@@ -339,11 +372,24 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             <h2 className="text-2xl font-bold text-gray-800 mb-4">Welcome to Your Style Assistant</h2>
-                            <p className="text-gray-600 mb-8 leading-relaxed">Take photos of your clothes and let AI create amazing outfit combinations for you!</p>
-                            <button onClick={() => setIsCameraOpen(true)} className="bg-indigo-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-indigo-700 transition-colors duration-300 shadow-lg flex items-center space-x-2">
-                                <CameraIcon className="w-5 h-5" />
-                                <span>Take Photos</span>
-                            </button>
+                            <p className="text-gray-600 mb-8 leading-relaxed">Take photos or upload images of your clothes and let AI create amazing outfit combinations for you!</p>
+                            <div className="space-y-3 w-full max-w-xs">
+                                <button onClick={() => setIsCameraOpen(true)} className="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-indigo-700 transition-colors duration-300 shadow-lg flex items-center justify-center space-x-2">
+                                    <CameraIcon className="w-5 h-5" />
+                                    <span>Take Photos</span>
+                                </button>
+                                <label className="w-full bg-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-purple-700 transition-colors duration-300 shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
+                                    <ImageIcon className="w-5 h-5" />
+                                    <span>Upload Images</span>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept="image/*"
+                                        onChange={handleFileUpload}
+                                        className="hidden"
+                                    />
+                                </label>
+                            </div>
                         </>
                     )}
                     {appState === AppState.Capturing && (
@@ -389,15 +435,26 @@ const App: React.FC = () => {
                                         <span>Get Outfit Ideas</span>
                                     </button>
                                 )}
-                                <button 
-                                    onClick={() => setIsCameraOpen(true)}
-                                    className="w-full bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl hover:bg-gray-300 transition-colors duration-300 flex items-center justify-center space-x-2"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    <span>{photos.length === 0 ? 'Take Photos' : 'Add More Photos'}</span>
-                                </button>
+                                <div className="flex space-x-2">
+                                    <button 
+                                        onClick={() => setIsCameraOpen(true)}
+                                        className="flex-1 bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl hover:bg-gray-300 transition-colors duration-300 flex items-center justify-center space-x-2"
+                                    >
+                                        <CameraIcon className="w-5 h-5" />
+                                        <span>{photos.length === 0 ? 'Camera' : 'Camera'}</span>
+                                    </button>
+                                    <label className="flex-1 bg-purple-200 text-purple-700 font-bold py-3 px-4 rounded-xl hover:bg-purple-300 transition-colors duration-300 flex items-center justify-center space-x-2 cursor-pointer">
+                                        <ImageIcon className="w-5 h-5" />
+                                        <span>Upload</span>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            accept="image/*"
+                                            onChange={handleFileUpload}
+                                            className="hidden"
+                                        />
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     )}
