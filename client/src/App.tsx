@@ -345,10 +345,17 @@ const CameraView: React.FC<CameraViewProps> = ({ onTakePhoto, onClose }) => {
 interface WardrobeItemCardProps {
   item: WardrobeItem;
   onDelete: (id: number) => void;
-  onWear: (id: number) => void;
+  onWear: (id: number, wearCount?: number) => void;
 }
 
 const WardrobeItemCard: React.FC<WardrobeItemCardProps> = ({ item, onDelete, onWear }) => {
+  const [selectedWearCount, setSelectedWearCount] = useState(item.wearCount);
+
+  const handleWearCountChange = (newCount: number) => {
+    setSelectedWearCount(newCount);
+    onWear(item.id, newCount);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <img 
@@ -378,14 +385,24 @@ const WardrobeItemCard: React.FC<WardrobeItemCardProps> = ({ item, onDelete, onW
             </div>
           </div>
         )}
-        <p className="text-xs text-gray-500 mb-2">Worn {item.wearCount} times</p>
-        <div className="flex justify-between">
-          <button
-            onClick={() => onWear(item.id)}
-            className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200"
-          >
-            Mark as Worn
-          </button>
+        <div className="mb-2">
+          <p className="text-xs text-gray-500 mb-1">Worn {selectedWearCount} times</p>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-600">Mark as worn:</span>
+            <select
+              value={selectedWearCount}
+              onChange={(e) => handleWearCountChange(parseInt(e.target.value))}
+              className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white"
+            >
+              {[0, 1, 2, 3, 4, 5].map((count) => (
+                <option key={count} value={count}>
+                  {count} times
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end">
           <button
             onClick={() => onDelete(item.id)}
             className="text-xs text-red-600 hover:text-red-800"
@@ -677,12 +694,13 @@ const App: React.FC = () => {
     deleteItemMutation.mutate(id);
   };
 
-  const handleWearItem = (id: number) => {
+  const handleWearItem = (id: number, wearCount?: number) => {
     const item = wardrobeItems.find((item: WardrobeItem) => item.id === id);
     if (item) {
+      const newWearCount = wearCount !== undefined ? wearCount : item.wearCount + 1;
       updateItemMutation.mutate({
         id,
-        updates: { wearCount: item.wearCount + 1 }
+        updates: { wearCount: newWearCount }
       });
     }
   };
