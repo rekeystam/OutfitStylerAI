@@ -200,6 +200,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onTakePhoto, onClose }) => {
   useEffect(() => {
     const getCameraStream = async () => {
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setError("Camera not supported in this browser or environment.");
+          return;
+        }
+        
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: "environment" },
           audio: false 
@@ -208,6 +213,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onTakePhoto, onClose }) => {
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
+        setError(null);
       } catch (err) {
         console.error("Error accessing camera:", err);
         setError("Could not access the camera. Please check permissions and try again.");
@@ -366,10 +372,17 @@ const App: React.FC = () => {
   const userId = 1; // Mock user ID for demo
   const queryClient = useQueryClient();
 
+  // Clear errors when state changes
+  useEffect(() => {
+    if (appState !== AppState.Error) {
+      setError(null);
+    }
+  }, [appState]);
+
   // Query wardrobe items
   const { data: wardrobeItems = [], isLoading: isLoadingWardrobe } = useQuery({
     queryKey: ['/api/wardrobe-items', userId],
-    queryFn: () => fetch(`/api/wardrobe-items/${userId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/wardrobe-items/${userId}`),
   });
 
   // Add wardrobe item mutation
@@ -651,6 +664,15 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <Header />
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-lg">
+        {error && appState !== AppState.Error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 m-4">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
         {renderContent()}
       </div>
       {isCameraOpen && (
