@@ -11,12 +11,21 @@ interface OutfitRecommendation {
   occasion: string;
   temperature: string;
   reasoning: string;
+  spotlightItem?: WardrobeItem;
+  styling: {
+    description: string;
+    colorTips: string;
+    sizingTips: string;
+    alternatives: string[];
+  };
 }
 
 interface AnalyzedItem {
   name: string;
   category: string;
   colors: string[];
+  occasions: string[];
+  versatility: string;
 }
 
 // --- ICONS ---
@@ -66,38 +75,45 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey });
 
-const ANALYZE_ITEM_PROMPT = `You are a fashion stylist. Analyze the clothing item in the attached image. Identify the specific clothing item, its category, and the primary colors. Respond with a JSON object with the following structure: {"name": "item name", "category": "category", "colors": ["color1", "color2"]}. 
+const ANALYZE_ITEM_PROMPT = `You are a fashion stylist. Analyze the clothing item in the attached image. Identify the specific clothing item, its category, primary colors, suitable occasions, and versatility. Respond with a JSON object with the following structure: {"name": "item name", "category": "category", "colors": ["color1", "color2"], "occasions": ["occasion1", "occasion2"], "versatility": "description of how versatile this item is"}.
 
 Categories should be one of: shirt, t-shirt, blouse, tank-top, sweater, hoodie, cardigan, jacket, coat, blazer, dress, skirt, pants, jeans, shorts, leggings, shoes, sneakers, boots, sandals, hat, scarf, belt, bag, accessories.
 
 Colors should be basic color names like: black, white, gray, brown, tan, red, pink, orange, yellow, green, blue, navy, purple, denim, gold, silver.
 
-Example response: {"name": "Blue Denim Jacket", "category": "jacket", "colors": ["blue", "denim"]}`;
+Occasions should include: casual, work, formal, party, date, weekend, travel, seasonal, sport, evening.
 
-const OUTFIT_PROMPT = `You are a professional fashion stylist. Generate outfits following these strict requirements:
+Example response: {"name": "Blue Denim Jacket", "category": "jacket", "colors": ["blue", "denim"], "occasions": ["casual", "weekend"], "versatility": "Perfect layering piece that works with dresses, t-shirts, and can be dressed up or down"}`;
 
-COMPOSITION REQUIREMENTS:
-- Each outfit must include minimum 3 items
-- Must include at least one accessory (scarf, hat, jewelry, belt, bag)
-- Must include at least one jacket/outerwear when temperature requires
-- Base must include: top + bottom + accessory minimum
+const OUTFIT_PROMPT = `You are a professional fashion stylist. Generate outfits following these requirements:
+
+COMPOSITION FLEXIBILITY:
+- Outfits can be as simple as 2 items (e.g., dress + shoes) or complex (3+ items)
+- For dresses: pair with matching shoes, accessories, or outerwear
+- For casual looks: T-shirt + pants + sneakers combinations work well
+- Always identify ONE spotlight item per outfit (the star piece)
+
+STYLING DETAILS REQUIRED:
+- Provide detailed styling tips for colors, sizing, and alternatives
+- Suggest color coordination and contrast techniques
+- Include fit and sizing recommendations
+- Offer alternative pieces for different looks
+
+OCCASION ADAPTATION:
+- Casual: Comfortable, relaxed pieces with sneakers or flats
+- Work: Professional, polished looks with blazers or dress shoes
+- Formal: Elegant pieces with heels and refined accessories
+- Party/Evening: Statement pieces with bold colors or textures
+- Date: Flattering, stylish pieces that show personality
+- Weekend: Laid-back, versatile pieces for multiple activities
 
 TEMPERATURE SUITABILITY:
-- Warm (>25°C): Light fabrics, breathable materials, sun protection accessories
-- Mild (15-25°C): Layerable pieces, light jackets, versatile accessories  
+- Warm (>25°C): Light fabrics, breathable materials, sun protection
+- Mild (15-25°C): Layerable pieces, light jackets
 - Cool (5-15°C): Sweaters, medium jackets, warm accessories
-- Cold (<5°C): Heavy coats, warm layers, winter accessories (scarves, gloves)
+- Cold (<5°C): Heavy coats, warm layers, winter accessories
 
-UNIQUENESS CONSTRAINT:
-- Each outfit must feature at least one unique item not used in other outfits
-- Ensure variety across all generated outfits
-
-GENERATION PROCESS (3 steps):
-1. WARDROBE ANALYSIS: Categorize items by temperature suitability
-2. BASE SELECTION: Choose core items (top, bottom, accessory) for temperature
-3. ENHANCEMENT: Add unique statement pieces and ensure minimum requirements
-
-Respond with JSON: {"outfits": [{"name": "creative outfit name", "occasion": "occasion", "temperature": "temperature range", "items": ["item name 1", "item name 2", "item name 3+"], "reasoning": "why these items work together for this temperature and occasion"}]}
+Respond with JSON: {"outfits": [{"name": "creative outfit name", "occasion": "occasion", "temperature": "temperature range", "items": ["item name 1", "item name 2"], "spotlightItem": "name of the star piece", "reasoning": "why these items work together", "styling": {"description": "detailed styling description", "colorTips": "color coordination advice", "sizingTips": "fit and sizing recommendations", "alternatives": ["alternative piece 1", "alternative piece 2"]}}]}
 
 Temperature ranges: warm, mild, cool, cold
 Occasions: casual, work, formal, party, date, weekend, travel, seasonal`;
@@ -127,7 +143,13 @@ async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
         }
 
         const parsedData = JSON.parse(jsonStr);
-        return parsedData as AnalyzedItem;
+        return {
+            name: parsedData.name,
+            category: parsedData.category,
+            colors: parsedData.colors,
+            occasions: parsedData.occasions || [],
+            versatility: parsedData.versatility || ""
+        } as AnalyzedItem;
 
     } catch (error) {
         console.error("Error analyzing item:", error);
@@ -135,16 +157,24 @@ async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
     }
 }
 
-async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[]): Promise<OutfitRecommendation[]> {
+async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occasion?: string, temperature?: string): Promise<OutfitRecommendation[]> {
     if (wardrobeItems.length === 0) {
         return [];
     }
 
     const itemsDescription = wardrobeItems.map(item => 
-        `${item.name} (${item.category}, colors: ${item.colors.join(', ')}, worn ${item.wearCount} times)`
+        `${item.name} (${item.category}, colors: ${item.colors.join(', ')}, occasions: ${item.occasions.join(', ')}, worn ${item.wearCount} times)`
     ).join('\n');
 
-    const fullPrompt = `${OUTFIT_PROMPT}\n\nWardrobe items:\n${itemsDescription}`;
+    let fullPrompt = `${OUTFIT_PROMPT}\n\nWardrobe items:\n${itemsDescription}`;
+    
+    if (occasion) {
+        fullPrompt += `\n\nFOCUS OCCASION: ${occasion} - prioritize outfits suitable for this occasion`;
+    }
+    
+    if (temperature) {
+        fullPrompt += `\n\nPREFERRED TEMPERATURE: ${temperature} - focus on outfits for this temperature range`;
+    }
 
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
@@ -166,22 +196,32 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[]): Pro
 
         if (parsedData && Array.isArray(parsedData.outfits)) {
             // Map item names back to actual WardrobeItem objects
-            const outfits = parsedData.outfits.map((outfit: {
-                name: string, 
-                occasion: string, 
-                temperature: string,
-                reasoning: string,
-                items: string[]
-            }) => ({
-                name: outfit.name,
-                occasion: outfit.occasion,
-                temperature: outfit.temperature,
-                reasoning: outfit.reasoning,
-                items: outfit.items.map((itemName: string) => 
+            const outfits = parsedData.outfits.map((outfit: any) => {
+                const matchedItems = outfit.items.map((itemName: string) => 
                     wardrobeItems.find(item => item.name.toLowerCase().includes(itemName.toLowerCase())) || 
                     wardrobeItems.find(item => itemName.toLowerCase().includes(item.name.toLowerCase()))
-                ).filter(Boolean)
-            }));
+                ).filter(Boolean);
+
+                const spotlightItem = outfit.spotlightItem ? 
+                    wardrobeItems.find(item => item.name.toLowerCase().includes(outfit.spotlightItem.toLowerCase())) ||
+                    wardrobeItems.find(item => outfit.spotlightItem.toLowerCase().includes(item.name.toLowerCase()))
+                    : matchedItems[0];
+
+                return {
+                    name: outfit.name,
+                    occasion: outfit.occasion,
+                    temperature: outfit.temperature,
+                    reasoning: outfit.reasoning,
+                    items: matchedItems,
+                    spotlightItem: spotlightItem,
+                    styling: outfit.styling || {
+                        description: "Classic styling approach",
+                        colorTips: "Match similar tones",
+                        sizingTips: "Ensure proper fit",
+                        alternatives: []
+                    }
+                };
+            });
             
             return outfits.filter(outfit => outfit.items.length >= 3);
         }
@@ -326,6 +366,18 @@ const WardrobeItemCard: React.FC<WardrobeItemCardProps> = ({ item, onDelete, onW
             </span>
           ))}
         </div>
+        {item.occasions && item.occasions.length > 0 && (
+          <div className="mb-2">
+            <p className="text-xs text-gray-500 mb-1">Perfect for:</p>
+            <div className="flex flex-wrap gap-1">
+              {item.occasions.map((occasion, index) => (
+                <span key={index} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full capitalize">
+                  {occasion}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <p className="text-xs text-gray-500 mb-2">Worn {item.wearCount} times</p>
         <div className="flex justify-between">
           <button
@@ -352,6 +404,8 @@ interface OutfitCardProps {
 }
 
 const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
+  const [showDetails, setShowDetails] = useState(false);
+
   const getTemperatureColor = (temp: string) => {
     if (!temp) return 'bg-gray-100 text-gray-800';
     switch (temp.toLowerCase()) {
@@ -386,16 +440,51 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
             <span className={`text-sm px-2 py-1 rounded-full capitalize ${getTemperatureColor(outfit.temperature)}`}>
               {getTemperatureIcon(outfit.temperature)} {outfit.temperature}
             </span>
+            {outfit.spotlightItem && (
+              <span className="text-sm bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                ⭐ Spotlight: {outfit.spotlightItem.name}
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-600 italic mb-3">{outfit.reasoning}</p>
         </div>
-        <button
-          onClick={() => onWearOutfit(outfit.items)}
-          className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700 ml-3"
-        >
-          Wear This
-        </button>
+        <div className="flex flex-col space-y-2 ml-3">
+          <button
+            onClick={() => onWearOutfit(outfit.items)}
+            className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700"
+          >
+            Wear This
+          </button>
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200"
+          >
+            {showDetails ? 'Hide Details' : 'Styling Tips'}
+          </button>
+        </div>
       </div>
+
+      {showDetails && outfit.styling && (
+        <div className="bg-gray-50 rounded-lg p-3 mb-3">
+          <h4 className="font-semibold text-sm text-gray-800 mb-2">Styling Guide</h4>
+          <div className="space-y-2 text-sm text-gray-600">
+            <div>
+              <strong>Description:</strong> {outfit.styling.description}
+            </div>
+            <div>
+              <strong>Color Tips:</strong> {outfit.styling.colorTips}
+            </div>
+            <div>
+              <strong>Sizing Tips:</strong> {outfit.styling.sizingTips}
+            </div>
+            {outfit.styling.alternatives && outfit.styling.alternatives.length > 0 && (
+              <div>
+                <strong>Alternatives:</strong> {outfit.styling.alternatives.join(", ")}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       <div className="border-t pt-3">
         <h4 className="text-sm font-semibold text-gray-700 mb-2">
@@ -403,7 +492,12 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
         </h4>
         <div className="grid grid-cols-3 gap-2">
           {outfit.items.map((item, index) => (
-            <div key={index} className="text-center">
+            <div key={index} className="text-center relative">
+              {outfit.spotlightItem && outfit.spotlightItem.id === item.id && (
+                <div className="absolute -top-1 -right-1 bg-yellow-400 text-yellow-900 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                  ⭐
+                </div>
+              )}
               <img 
                 src={item.image} 
                 alt={item.name}
@@ -411,6 +505,13 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
               />
               <p className="text-xs text-gray-600 truncate font-medium">{item.name}</p>
               <p className="text-xs text-gray-500 capitalize">{item.category}</p>
+              <div className="flex flex-wrap gap-1 mt-1 justify-center">
+                {item.colors.slice(0, 2).map((color, colorIndex) => (
+                  <span key={colorIndex} className="text-xs bg-gray-200 text-gray-600 px-1 rounded">
+                    {color}
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -501,7 +602,7 @@ const App: React.FC = () => {
         colors: analyzedItem.colors,
         image: photo,
         wearCount: 0,
-        occasions: [],
+        occasions: analyzedItem.occasions || [],
       };
 
       addItemMutation.mutate(wardrobeItem);
@@ -552,26 +653,15 @@ const App: React.FC = () => {
     });
   };
 
-  const handleGenerateOutfits = async (temperature?: string) => {
-    if (wardrobeItems.length < 3) {
-      setError('Add at least 3 items to your wardrobe to generate outfit recommendations');
-      return;
-    }
-
-    // Check if wardrobe has minimum required items for proper outfits
-    const categories = wardrobeItems.map((item: WardrobeItem) => item.category);
-    const hasAccessory = categories.some((cat: string) => 
-      ['hat', 'scarf', 'belt', 'bag', 'accessories', 'jewelry'].includes(cat.toLowerCase())
-    );
-    
-    if (!hasAccessory) {
-      setError('Add at least one accessory (hat, scarf, belt, bag, or jewelry) to generate complete outfits');
+  const handleGenerateOutfits = async (occasion?: string, temperature?: string) => {
+    if (wardrobeItems.length < 2) {
+      setError('Add at least 2 items to your wardrobe to generate outfit recommendations');
       return;
     }
 
     setAppState(AppState.Loading);
     try {
-      const recommendations = await generateOutfitRecommendations(wardrobeItems);
+      const recommendations = await generateOutfitRecommendations(wardrobeItems, occasion, temperature);
       setOutfitRecommendations(recommendations);
       setAppState(AppState.Outfits);
     } catch (error) {
@@ -609,14 +699,29 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">My Wardrobe</h2>
               <div className="flex space-x-2">
-                {wardrobeItems.length >= 3 && (
-                  <button
-                    onClick={() => handleGenerateOutfits()}
-                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2"
-                  >
-                    <SparklesIcon className="w-4 h-4" />
-                    <span>Get Outfits</span>
-                  </button>
+                {wardrobeItems.length >= 2 && (
+                  <div className="flex space-x-2">
+                    <select 
+                      onChange={(e) => handleGenerateOutfits(e.target.value)}
+                      className="text-xs px-2 py-1 border rounded-lg"
+                      defaultValue=""
+                    >
+                      <option value="">All Occasions</option>
+                      <option value="casual">Casual</option>
+                      <option value="work">Work</option>
+                      <option value="formal">Formal</option>
+                      <option value="party">Party</option>
+                      <option value="date">Date</option>
+                      <option value="weekend">Weekend</option>
+                    </select>
+                    <button
+                      onClick={() => handleGenerateOutfits()}
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
+                      <span>Get Outfits</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
