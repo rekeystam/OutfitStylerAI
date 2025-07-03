@@ -15,6 +15,8 @@ export const wardrobeItems = pgTable("wardrobe_items", {
   category: text("category").notNull(), // shirt, pants, shoes, dress, etc.
   colors: text("colors").array().notNull(), // array of color names
   image: text("image").notNull(), // base64 image data
+  photoHash: text("photo_hash").notNull(), // hash of the image for duplicate detection
+  style: text("style"), // detailed style description for differentiation
   wearCount: integer("wear_count").default(0).notNull(),
   occasions: text("occasions").array().default([]).notNull(), // casual, formal, work, party, etc.
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -37,6 +39,9 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const insertWardrobeItemSchema = createInsertSchema(wardrobeItems).omit({
   id: true,
   createdAt: true,
+}).extend({
+  photoHash: z.string().optional(),
+  style: z.string().optional(),
 });
 
 export const insertOutfitSchema = createInsertSchema(outfits).omit({

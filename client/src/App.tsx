@@ -75,15 +75,17 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey });
 
-const ANALYZE_ITEM_PROMPT = `You are a fashion stylist. Analyze the clothing item in the attached image. Identify the specific clothing item, its category, primary colors, suitable occasions, and versatility. Respond with a JSON object with the following structure: {"name": "item name", "category": "category", "colors": ["color1", "color2"], "occasions": ["occasion1", "occasion2"], "versatility": "description of how versatile this item is"}.
+const ANALYZE_ITEM_PROMPT = `Analyze this clothing item image and provide the following information in JSON format:
+    {
+      "name": "specific item name (e.g., 'Navy Blue Cotton T-Shirt')",
+      "category": "clothing category (e.g., 'shirt', 'pants', 'shoes', 'dress', 'accessory')",
+      "colors": ["array", "of", "color", "names"],
+      "occasions": ["array", "of", "suitable", "occasions"],
+      "versatility": "description of how versatile this item is",
+      "style": "detailed style description including material, cut, design details (e.g., 'cotton crew neck with short sleeves', 'wide leather with gold buckle')"
+    }
 
-Categories should be one of: shirt, t-shirt, blouse, tank-top, sweater, hoodie, cardigan, jacket, coat, blazer, dress, skirt, pants, jeans, shorts, leggings, shoes, sneakers, boots, sandals, hat, scarf, belt, bag, accessories.
-
-Colors should be basic color names like: black, white, gray, brown, tan, red, pink, orange, yellow, green, blue, navy, purple, denim, gold, silver.
-
-Occasions should include: casual, work, formal, party, date, weekend, travel, seasonal, sport, evening.
-
-Example response: {"name": "Blue Denim Jacket", "category": "jacket", "colors": ["blue", "denim"], "occasions": ["casual", "weekend"], "versatility": "Perfect layering piece that works with dresses, t-shirts, and can be dressed up or down"}`;
+    Be specific with the name and accurate with colors. For occasions, choose from: casual, work, formal, party, date, weekend, sports, travel. For style, include material, fit, and distinctive features.`;
 
 const OUTFIT_PROMPT = `You are a professional fashion stylist. Generate outfits following these requirements:
 
@@ -148,7 +150,8 @@ async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
             category: parsedData.category,
             colors: parsedData.colors,
             occasions: parsedData.occasions || [],
-            versatility: parsedData.versatility || ""
+            versatility: parsedData.versatility || "",
+            style: parsedData.style || ""
         } as AnalyzedItem;
 
     } catch (error) {
@@ -167,11 +170,11 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
     ).join('\n');
 
     let fullPrompt = `${OUTFIT_PROMPT}\n\nWardrobe items:\n${itemsDescription}`;
-    
+
     if (occasion) {
         fullPrompt += `\n\nFOCUS OCCASION: ${occasion} - prioritize outfits suitable for this occasion`;
     }
-    
+
     if (temperature) {
         fullPrompt += `\n\nPREFERRED TEMPERATURE: ${temperature} - focus on outfits for this temperature range`;
     }
@@ -222,7 +225,7 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
                     }
                 };
             });
-            
+
             return outfits.filter(outfit => outfit.items.length >= 3);
         }
 
@@ -234,27 +237,99 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
     }
 }
 
-// --- COMPONENTS ---
-const Header: React.FC = () => {
-    return (
-        <header className="bg-white shadow-md w-full">
-            <div className="flex justify-center items-center p-4">
-                <div className="flex items-center space-x-2">
-                    <SparklesIcon className="w-8 h-8 text-indigo-500" />
-                    <h1 className="text-xl font-bold text-gray-800">AI Wardrobe Assistant</h1>
-                </div>
-            </div>
-        </header>
-    );
+// Utility functions
+const apiRequest = async (url: string, method: string = 'GET', body?: any) => {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
 };
 
-const LoadingSpinner: React.FC = () => {
-    return (
-        <div className="flex justify-center items-center p-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-        </div>
-    );
+// Simple hash function for photo data
+const hashPhoto = async (base64Photo: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(base64Photo);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
+
+const LoadingSpinner: React.FC = () => (
+  <div className="flex justify-center items-center p-8">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+  </div>
+);
+
+const DuplicateDetectionDialog: React.FC<{
+  duplicates: WardrobeItem[];
+  pendingItem: InsertWardrobeItem;
+  onAddAnyway: () => void;
+  onCancel: () => void;
+}> = ({ duplicates, pendingItem, onAddAnyway, onCancel }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-lg max-w-md w-full max-h-96 overflow-y-auto">
+      <div className="p-4 border-b">
+        <h3 className="text-lg font-semibold text-gray-800">Potential Duplicate Detected</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          We found {duplicates.length} similar item{duplicates.length > 1 ? 's' : ''} in your wardrobe:
+        </p>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {duplicates.map((duplicate) => (
+          <div key={duplicate.id} className="flex space-x-3 p-2 bg-gray-50 rounded">
+            <img 
+              src={duplicate.image} 
+              alt={duplicate.name}
+              className="w-12 h-12 object-cover rounded"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 truncate">{duplicate.name}</p>
+              <p className="text-xs text-gray-500">{duplicate.category}</p>
+              <p className="text-xs text-gray-500">Colors: {duplicate.colors.join(', ')}</p>
+              {duplicate.style && (
+                <p className="text-xs text-gray-500">Style: {duplicate.style}</p>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <div className="mt-4 p-2 bg-blue-50 rounded">
+          <p className="text-sm font-medium text-blue-800">New Item:</p>
+          <p className="text-sm text-blue-700">{pendingItem.name}</p>
+          <p className="text-xs text-blue-600">{pendingItem.category} - {pendingItem.colors.join(', ')}</p>
+          {pendingItem.style && (
+            <p className="text-xs text-blue-600">Style: {pendingItem.style}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 border-t flex space-x-3">
+        <button
+          onClick={onCancel}
+          className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onAddAnyway}
+          className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+        >
+          Add Anyway
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 interface CameraViewProps {
   onTakePhoto: (photo: string) => void;
@@ -274,7 +349,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onTakePhoto, onClose }) => {
           setError("Camera not supported in this browser or environment.");
           return;
         }
-        
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: "environment" },
           audio: false 
@@ -303,7 +378,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onTakePhoto, onClose }) => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      
+
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
@@ -502,7 +577,7 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
           </div>
         </div>
       )}
-      
+
       <div className="border-t pt-3">
         <h4 className="text-sm font-semibold text-gray-700 mb-2">
           Items ({outfit.items.length}):
@@ -553,7 +628,11 @@ const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [outfitRecommendations, setOutfitRecommendations] = useState<OutfitRecommendation[]>([]);
-  
+
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState<boolean>(false);
+  const [duplicateItems, setDuplicateItems] = useState<WardrobeItem[]>([]);
+  const [pendingItem, setPendingItem] = useState<InsertWardrobeItem | null>(null);
+
   const userId = 1; // Mock user ID for demo
   const queryClient = useQueryClient();
 
@@ -578,11 +657,17 @@ const App: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['/api/wardrobe-items', userId] });
       setAppState(AppState.Wardrobe);
       setIsAnalyzing(false);
+      setShowDuplicateDialog(false);
+      setPendingItem(null);
+      setDuplicateItems([]);
     },
     onError: (error) => {
       console.error('Error adding item:', error);
       setError('Failed to add item to wardrobe');
       setIsAnalyzing(false);
+      setShowDuplicateDialog(false);
+      setPendingItem(null);
+      setDuplicateItems([]);
     }
   });
 
@@ -608,24 +693,38 @@ const App: React.FC = () => {
     setIsCameraOpen(false);
     setIsAnalyzing(true);
     setAppState(AppState.AddingItem);
-    
+
     try {
       const analyzedItem = await analyzeClothingItem(photo);
-      
+      const photoHash = await hashPhoto(photo);
+
       const wardrobeItem: InsertWardrobeItem = {
         userId,
         name: analyzedItem.name,
         category: analyzedItem.category,
         colors: analyzedItem.colors,
         image: photo,
+        photoHash,
+        style: analyzedItem.style,
         wearCount: 0,
         occasions: analyzedItem.occasions || [],
       };
 
-      addItemMutation.mutate(wardrobeItem);
+      // Check for duplicates first
+      const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
+
+      if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
+        setDuplicateItems(duplicateResponse.duplicates);
+        setPendingItem(wardrobeItem);
+        setShowDuplicateDialog(true);
+        setIsAnalyzing(false);
+      } else {
+        addItemMutation.mutate(wardrobeItem);
+      }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to analyze item');
       setIsAnalyzing(false);
+      setAppState(AppState.Error);
     }
   };
 
@@ -633,7 +732,7 @@ const App: React.FC = () => {
     const files = event.target.files;
     if (files && files.length > 0) {
       const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/')).slice(0, 10);
-      
+
       if (imageFiles.length === 0) {
         setError('Please select valid image files');
         return;
@@ -657,33 +756,46 @@ const App: React.FC = () => {
               }
             };
           });
-          
+
           reader.readAsDataURL(file);
           const photo = await photoPromise;
-          
+
           const analyzedItem = await analyzeClothingItem(photo);
-          
+          const photoHash = await hashPhoto(photo);
+
           const wardrobeItem: InsertWardrobeItem = {
             userId,
             name: analyzedItem.name,
             category: analyzedItem.category,
             colors: analyzedItem.colors,
             image: photo,
+            photoHash,
+            style: analyzedItem.style,
             wearCount: 0,
             occasions: analyzedItem.occasions || [],
           };
 
-          await new Promise<void>((resolve, reject) => {
-            addItemMutation.mutate(wardrobeItem, {
-              onSuccess: () => resolve(),
-              onError: (error) => reject(error)
+          const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
+
+          if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
+            setDuplicateItems(duplicateResponse.duplicates);
+            setPendingItem(wardrobeItem);
+            setShowDuplicateDialog(true);
+            setIsAnalyzing(false);
+          } else {
+
+            await new Promise<void>((resolve, reject) => {
+              addItemMutation.mutate(wardrobeItem, {
+                onSuccess: () => resolve(),
+                onError: (error) => reject(error)
+              });
             });
-          });
+          }
         } catch (error) {
           console.error('Error processing file:', file.name, error);
         }
       }
-      
+
       setIsAnalyzing(false);
       setAppState(AppState.Wardrobe);
     }
@@ -729,6 +841,20 @@ const App: React.FC = () => {
       setError(error instanceof Error ? error.message : 'Failed to generate outfits');
       setAppState(AppState.Error);
     }
+  };
+
+  const handleAddDuplicateAnyway = () => {
+    if (pendingItem) {
+      addItemMutation.mutate(pendingItem);
+    }
+  };
+
+  const handleCancelDuplicate = () => {
+    setShowDuplicateDialog(false);
+    setPendingItem(null);
+    setDuplicateItems([]);
+    setIsAnalyzing(false);
+    setAppState(AppState.Wardrobe);
   };
 
   const renderContent = () => {
@@ -924,6 +1050,14 @@ const App: React.FC = () => {
         <CameraView
           onTakePhoto={handleTakePhoto}
           onClose={() => setIsCameraOpen(false)}
+        />
+      )}
+      {showDuplicateDialog && pendingItem && (
+        <DuplicateDetectionDialog
+          duplicates={duplicateItems}
+          pendingItem={pendingItem}
+          onAddAnyway={handleAddDuplicateAnyway}
+          onCancel={handleCancelDuplicate}
         />
       )}
     </div>

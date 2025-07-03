@@ -23,6 +23,7 @@ export interface IStorage {
   getWardrobeItems(userId: number): Promise<WardrobeItem[]>;
   updateWardrobeItem(id: number, updates: Partial<WardrobeItem>): Promise<WardrobeItem | undefined>;
   deleteWardrobeItem(id: number): Promise<boolean>;
+  findDuplicateItems(userId: number, item: InsertWardrobeItem): Promise<WardrobeItem[]>;
   
   // Outfits
   createOutfit(outfit: InsertOutfit): Promise<Outfit>;
@@ -73,6 +74,8 @@ export class MemStorage implements IStorage {
       category: insertItem.category,
       colors: insertItem.colors,
       image: insertItem.image,
+      photoHash: insertItem.photoHash || "",
+      style: insertItem.style || null,
       userId: insertItem.userId || null,
       wearCount: insertItem.wearCount || 0,
       occasions: insertItem.occasions || [],
@@ -80,6 +83,36 @@ export class MemStorage implements IStorage {
     };
     this.wardrobeItems.set(id, item);
     return item;
+  }
+
+  async findDuplicateItems(userId: number, item: InsertWardrobeItem): Promise<WardrobeItem[]> {
+    const userItems = Array.from(this.wardrobeItems.values()).filter(
+      (existingItem) => existingItem.userId === userId
+    );
+
+    return userItems.filter(existingItem => {
+      // Check for photo hash match (exact photo duplicate)
+      if (item.photoHash && existingItem.photoHash === item.photoHash) {
+        return true;
+      }
+
+      // Check for attribute-based duplicates
+      const nameMatch = existingItem.name.toLowerCase().trim() === item.name.toLowerCase().trim();
+      const categoryMatch = existingItem.category.toLowerCase() === item.category.toLowerCase();
+      
+      // Check if colors arrays are identical (order doesn't matter)
+      const existingColors = existingItem.colors.map(c => c.toLowerCase()).sort();
+      const newColors = item.colors.map(c => c.toLowerCase()).sort();
+      const colorsMatch = JSON.stringify(existingColors) === JSON.stringify(newColors);
+
+      // Check style if both items have style descriptions
+      let styleMatch = true;
+      if (existingItem.style && item.style) {
+        styleMatch = existingItem.style.toLowerCase().trim() === item.style.toLowerCase().trim();
+      }
+
+      return nameMatch && categoryMatch && colorsMatch && styleMatch;
+    });
   }
 
   async getWardrobeItems(userId: number): Promise<WardrobeItem[]> {

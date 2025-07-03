@@ -5,6 +5,16 @@ import { insertWardrobeItemSchema, insertOutfitSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Wardrobe Items Routes
+  app.post("/api/wardrobe-items/check-duplicates", async (req, res) => {
+    try {
+      const validatedData = insertWardrobeItemSchema.parse(req.body);
+      const duplicates = await storage.findDuplicateItems(validatedData.userId || 1, validatedData);
+      res.json({ duplicates });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid data" });
+    }
+  });
+
   app.post("/api/wardrobe-items", async (req, res) => {
     try {
       const validatedData = insertWardrobeItemSchema.parse(req.body);
