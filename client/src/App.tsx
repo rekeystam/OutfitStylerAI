@@ -26,6 +26,7 @@ interface AnalyzedItem {
   colors: string[];
   occasions: string[];
   versatility: string;
+  style: string;
 }
 
 // --- ICONS ---
@@ -238,21 +239,6 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
 }
 
 // Utility functions
-const apiRequest = async (url: string, method: string = 'GET', body?: any) => {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  return response.json();
-};
 
 // Simple hash function for photo data
 const hashPhoto = async (base64Photo: string): Promise<string> => {
@@ -268,6 +254,26 @@ const LoadingSpinner: React.FC = () => (
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
   </div>
 );
+
+interface HeaderProps {
+  onReset: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onReset }) => {
+  return (
+    <header className="bg-white shadow-md w-full max-w-md mx-auto">
+      <div className="flex justify-between items-center p-4">
+        <div className="flex items-center space-x-2">
+          <SparklesIcon className="w-8 h-8 text-indigo-500" />
+          <h1 className="text-xl font-bold text-gray-800">AI Outfit Recommender</h1>
+        </div>
+        <button onClick={onReset} className="text-sm text-gray-500 hover:text-indigo-600">
+          Start Over
+        </button>
+      </div>
+    </header>
+  );
+};
 
 const DuplicateDetectionDialog: React.FC<{
   duplicates: WardrobeItem[];
@@ -1031,9 +1037,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handleReset = () => {
+    setAppState(AppState.Welcome);
+    setError(null);
+    setOutfitRecommendations([]);
+    setIsCameraOpen(false);
+    setIsAnalyzing(false);
+    setShowDuplicateDialog(false);
+    setDuplicateItems([]);
+    setPendingItem(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <Header onReset={handleReset} />
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-lg">
         {error && appState !== AppState.Error && (
           <div className="bg-red-50 border-l-4 border-red-400 p-4 m-4">
