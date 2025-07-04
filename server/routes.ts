@@ -98,6 +98,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Image serving route
+  app.get("/api/images/:fileName", async (req, res) => {
+    try {
+      const fileName = req.params.fileName;
+      const imageBuffer = await storage.getImage(fileName);
+      
+      if (imageBuffer) {
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+        res.send(imageBuffer);
+      } else {
+        res.status(404).json({ error: "Image not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Server error" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
