@@ -93,13 +93,20 @@ export class MemStorage implements IStorage {
       id,
       name: insertItem.name,
       category: insertItem.category,
+      subcategory: insertItem.subcategory || null,
       colors: insertItem.colors,
+      primaryColor: insertItem.primaryColor || null,
+      secondaryColor: insertItem.secondaryColor || null,
       image: imageUrl,
       photoHash: insertItem.photoHash || "",
       style: insertItem.style || null,
+      styleTags: insertItem.styleTags || [],
       userId: insertItem.userId || null,
       wearCount: insertItem.wearCount || 0,
       occasions: insertItem.occasions || [],
+      gender: insertItem.gender || "female",
+      layerable: insertItem.layerable || false,
+      versatility: insertItem.versatility || null,
       createdAt: new Date()
     };
     this.wardrobeItems.set(id, item);

@@ -23,9 +23,14 @@ interface OutfitRecommendation {
 interface AnalyzedItem {
   name: string;
   category: string;
+  subcategory?: string;
   colors: string[];
+  primaryColor?: string;
+  secondaryColor?: string;
+  styleTags: string[];
   occasions: string[];
   versatility: string;
+  layerable: boolean;
   style: string;
 }
 
@@ -79,44 +84,62 @@ const ai = new GoogleGenAI({ apiKey });
 const ANALYZE_ITEM_PROMPT = `Analyze this clothing item image and provide the following information in JSON format:
     {
       "name": "specific item name (e.g., 'Navy Blue Cotton T-Shirt')",
-      "category": "clothing category (e.g., 'shirt', 'pants', 'shoes', 'dress', 'accessory')",
+      "category": "main category: tops, bottoms, dresses, shoes, socks, accessories",
+      "subcategory": "specific type: blouses, shirts, t-shirts, sweaters, vests, tanks, skirts, pants, shorts, jeans, leggings, heels, flats, sneakers, boots, sandals, bags, jewelry, scarves, hats, belts",
       "colors": ["array", "of", "color", "names"],
-      "occasions": ["array", "of", "suitable", "occasions"],
+      "primaryColor": "main dominant color",
+      "secondaryColor": "accent or secondary color (if any)",
+      "styleTags": ["style", "descriptors", "like", "casual", "formal", "sporty", "elegant", "bohemian", "vintage", "modern", "minimalist"],
+      "occasions": ["suitable", "occasions"],
       "versatility": "description of how versatile this item is",
-      "style": "detailed style description including material, cut, design details (e.g., 'cotton crew neck with short sleeves', 'wide leather with gold buckle')"
+      "layerable": true/false,
+      "style": "detailed style description including material, cut, design details"
     }
 
-    Be specific with the name and accurate with colors. For occasions, choose from: casual, work, formal, party, date, weekend, sports, travel. For style, include material, fit, and distinctive features.`;
+    CATEGORIZATION RULES:
+    - Use exact category names: tops, bottoms, dresses, shoes, socks, accessories
+    - For subcategories, be specific: shirts (button-up), t-shirts (casual tees), blouses (dressy tops), etc.
+    - Primary color should be the most dominant color, secondary is accent/trim color
+    - Style tags should include 2-4 descriptors from: casual, formal, sporty, elegant, bohemian, vintage, modern, minimalist
+    - Occasions from: date, work, party, casual, formal, weekend, sports, travel
+    - Layerable means can be worn with other pieces (cardigans, vests, jackets = true, dresses = false)
+    - Focus on female clothing for now`;
 
-const OUTFIT_PROMPT = `You are a professional fashion stylist. Generate outfits following these requirements:
+const OUTFIT_PROMPT = `You are a professional fashion stylist specializing in female fashion. Generate outfits following these enhanced requirements:
 
-COMPOSITION FLEXIBILITY:
-- Outfits can be as simple as 2 items (e.g., dress + shoes) or complex (3+ items)
-- For dresses: pair with matching shoes, accessories, or outerwear
-- For casual looks: T-shirt + pants + sneakers combinations work well
-- Always identify ONE spotlight item per outfit (the star piece)
+CATEGORY-BASED OUTFIT RULES:
+- DRESS OUTFITS: Dress + shoes + optional accessories/socks. Match shoes with complementary or neutral colors.
+- SEPARATES OUTFITS: Top + bottom + shoes + optional accessories/socks. Colors should match (same family) or complement (opposite on color wheel).
+- LAYERED OUTFITS: Multiple tops or add vests/cardigans for depth. Use neutral base with accent colors.
 
-STYLING DETAILS REQUIRED:
-- Provide detailed styling tips for colors, sizing, and alternatives
-- Suggest color coordination and contrast techniques
-- Include fit and sizing recommendations
-- Offer alternative pieces for different looks
+COLOR HARMONY RULES:
+- NEUTRALS (black, white, gray, beige, tan, brown, cream): Work with ANY color
+- COMPLEMENTARY PAIRS: Red/green, blue/orange, yellow/purple, pink/green, navy/orange
+- ANALOGOUS COLORS: Blue/green/purple, red/orange/pink, yellow/orange/green
+- SOCKS: Usually neutral or matching shoes
+- ACCESSORIES: Can be neutral or accent color for pop
 
-OCCASION ADAPTATION:
-- Casual: Comfortable, relaxed pieces with sneakers or flats
-- Work: Professional, polished looks with blazers or dress shoes
-- Formal: Elegant pieces with heels and refined accessories
-- Party/Evening: Statement pieces with bold colors or textures
-- Date: Flattering, stylish pieces that show personality
-- Weekend: Laid-back, versatile pieces for multiple activities
+ENHANCED CATEGORIZATION:
+- Tops: blouses, shirts, t-shirts, sweaters, vests, tanks
+- Bottoms: skirts, pants, shorts, jeans, leggings  
+- Shoes: heels, flats, sneakers, boots, sandals
+- Accessories: bags, jewelry, scarves, hats, belts
+- Socks: always optional but recommended for boots/closed shoes
 
-TEMPERATURE SUITABILITY:
-- Warm (>25°C): Light fabrics, breathable materials, sun protection
-- Mild (15-25°C): Layerable pieces, light jackets
-- Cool (5-15°C): Sweaters, medium jackets, warm accessories
-- Cold (<5°C): Heavy coats, warm layers, winter accessories
+STYLING REQUIREMENTS:
+- Identify ONE spotlight item (the star piece that defines the outfit)
+- Provide specific color coordination advice
+- Include layering tips for versatile pieces
+- Suggest alternative pieces for different looks
+- Focus on female fashion sensibilities
 
-Respond with JSON: {"outfits": [{"name": "creative outfit name", "occasion": "occasion", "temperature": "temperature range", "items": ["item name 1", "item name 2"], "spotlightItem": "name of the star piece", "reasoning": "why these items work together", "styling": {"description": "detailed styling description", "colorTips": "color coordination advice", "sizingTips": "fit and sizing recommendations", "alternatives": ["alternative piece 1", "alternative piece 2"]}}]}
+TEMPERATURE STYLING:
+- Warm (>25°C): Light fabrics, breathable materials, sandals, sleeveless tops
+- Mild (15-25°C): Layerable pieces, light jackets, versatile shoes
+- Cool (5-15°C): Sweaters, medium jackets, boots, warm accessories
+- Cold (<5°C): Heavy coats, warm layers, winter boots, thick accessories
+
+Respond with JSON: {"outfits": [{"name": "creative outfit name", "occasion": "occasion from: date, work, party, casual, formal, weekend, sports, travel", "temperature": "temperature range", "items": ["item name 1", "item name 2"], "spotlightItem": "name of the star piece", "reasoning": "why these items work together using color harmony rules", "styling": {"description": "detailed styling description", "colorTips": "specific color coordination advice", "sizingTips": "fit and sizing recommendations", "alternatives": ["alternative piece 1", "alternative piece 2"]}}]}
 
 Temperature ranges: warm, mild, cool, cold
 Occasions: casual, work, formal, party, date, weekend, travel, seasonal`;
@@ -149,9 +172,14 @@ async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
         return {
             name: parsedData.name,
             category: parsedData.category,
+            subcategory: parsedData.subcategory,
             colors: parsedData.colors,
+            primaryColor: parsedData.primaryColor,
+            secondaryColor: parsedData.secondaryColor,
+            styleTags: parsedData.styleTags || [],
             occasions: parsedData.occasions || [],
             versatility: parsedData.versatility || "",
+            layerable: parsedData.layerable || false,
             style: parsedData.style || ""
         } as AnalyzedItem;
 
@@ -167,7 +195,7 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
     }
 
     const itemsDescription = wardrobeItems.map(item => 
-        `${item.name} (${item.category}, colors: ${item.colors.join(', ')}, occasions: ${item.occasions.join(', ')}, worn ${item.wearCount} times)`
+        `${item.name} (${item.category}${item.subcategory ? `/${item.subcategory}` : ''}, colors: ${item.colors.join(', ')}, primary: ${item.primaryColor || 'N/A'}, occasions: ${item.occasions.join(', ')}, style: ${item.styleTags?.join(', ') || 'N/A'}, worn ${item.wearCount} times)`
     ).join('\n');
 
     let fullPrompt = `${OUTFIT_PROMPT}\n\nWardrobe items:\n${itemsDescription}`;
@@ -227,7 +255,7 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
                 };
             });
 
-            return outfits.filter(outfit => outfit.items.length >= 3);
+            return outfits.filter((outfit: any) => outfit.items.length >= 3);
         }
 
         return [];
@@ -708,12 +736,19 @@ const App: React.FC = () => {
         userId,
         name: analyzedItem.name,
         category: analyzedItem.category,
+        subcategory: analyzedItem.subcategory,
         colors: analyzedItem.colors,
+        primaryColor: analyzedItem.primaryColor,
+        secondaryColor: analyzedItem.secondaryColor,
         image: photo,
         photoHash,
         style: analyzedItem.style,
+        styleTags: analyzedItem.styleTags || [],
         wearCount: 0,
         occasions: analyzedItem.occasions || [],
+        gender: "female",
+        layerable: analyzedItem.layerable || false,
+        versatility: analyzedItem.versatility,
       };
 
       // Check for duplicates first

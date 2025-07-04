@@ -12,13 +12,20 @@ export const wardrobeItems = pgTable("wardrobe_items", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
   name: text("name").notNull(),
-  category: text("category").notNull(), // shirt, pants, shoes, dress, etc.
+  category: text("category").notNull(), // tops, bottoms, dresses, shoes, socks, accessories
+  subcategory: text("subcategory"), // blouses, shirts, t-shirts, heels, flats, etc.
   colors: text("colors").array().notNull(), // array of color names
+  primaryColor: text("primary_color"), // main color for matching
+  secondaryColor: text("secondary_color"), // accent color
   image: text("image").notNull(), // base64 image data
   photoHash: text("photo_hash").notNull(), // hash of the image for duplicate detection
   style: text("style"), // detailed style description for differentiation
+  styleTags: text("style_tags").array().default([]).notNull(), // casual, formal, sporty, elegant
   wearCount: integer("wear_count").default(0).notNull(),
-  occasions: text("occasions").array().default([]).notNull(), // casual, formal, work, party, etc.
+  occasions: text("occasions").array().default([]).notNull(), // date, work, party, casual, etc.
+  gender: text("gender").default("female").notNull(), // female, male, unisex
+  layerable: boolean("layerable").default(false).notNull(), // can be layered
+  versatility: text("versatility"), // description of versatility
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -42,6 +49,10 @@ export const insertWardrobeItemSchema = createInsertSchema(wardrobeItems).omit({
 }).extend({
   photoHash: z.string().optional(),
   style: z.string().optional(),
+  subcategory: z.string().optional(),
+  primaryColor: z.string().optional(),
+  secondaryColor: z.string().optional(),
+  versatility: z.string().optional(),
 });
 
 export const insertOutfitSchema = createInsertSchema(outfits).omit({

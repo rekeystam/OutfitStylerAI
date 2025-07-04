@@ -31,13 +31,24 @@ The application follows a modern full-stack architecture with a clear separation
 
 ### Database Schema
 - **Users Table**: Basic user authentication with username/password
+- **Wardrobe Items Table**: Enhanced with detailed categorization
+  - Categories: tops, bottoms, dresses, shoes, socks, accessories
+  - Subcategories: blouses, shirts, t-shirts, heels, flats, etc.
+  - Color system: primary/secondary colors plus full color array
+  - Style tags: casual, formal, sporty, elegant, etc.
+  - Layering capability and versatility ratings
+  - Gender targeting (focused on female fashion)
+- **Outfits Table**: Combination records for outfit recommendations
 - Database migrations are managed through Drizzle Kit
 - Schema definitions are shared between frontend and backend via the `shared` directory
 
 ### AI Integration
 - **Google Gemini AI**: Used for analyzing clothing photos and generating outfit recommendations
-- Processes uploaded images to identify clothing items
-- Generates creative outfit combinations based on available wardrobe items
+- Enhanced image analysis with detailed categorization (category, subcategory, colors, style tags)
+- Processes uploaded images to identify clothing items with layering capability and versatility ratings
+- Generates creative outfit combinations using advanced color harmony rules
+- Color matching system with complementary, analogous, and neutral color coordination
+- Temperature-based styling recommendations (warm, mild, cool, cold)
 
 ## Data Flow
 
@@ -74,6 +85,7 @@ The application follows a modern full-stack architecture with a clear separation
   - Configured for PostgreSQL dialect
 
 ## Changelog
+- January 4, 2025. Enhanced categorization system with detailed color harmony rules
 - June 29, 2025. Initial setup
 
 ## User Preferences
