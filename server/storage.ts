@@ -9,7 +9,7 @@ import {
   type Outfit,
   type InsertOutfit
 } from "@shared/schema";
-import { Client } from "@replit/object-storage";
+// import { Client } from "@replit/object-storage";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -42,7 +42,7 @@ export class MemStorage implements IStorage {
   private currentUserId: number;
   private currentWardrobeItemId: number;
   private currentOutfitId: number;
-  private objectStorage: Client;
+  private imageStorage: Map<string, Buffer>;
 
   constructor() {
     this.users = new Map();
@@ -51,7 +51,7 @@ export class MemStorage implements IStorage {
     this.currentUserId = 1;
     this.currentWardrobeItemId = 1;
     this.currentOutfitId = 1;
-    this.objectStorage = new Client();
+    this.imageStorage = new Map();
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -75,17 +75,15 @@ export class MemStorage implements IStorage {
   async createWardrobeItem(insertItem: InsertWardrobeItem): Promise<WardrobeItem> {
     const id = this.currentWardrobeItemId++;
     
-    // Store image in Object Storage
+    // Store image in memory storage
     let imageUrl = insertItem.image;
     if (insertItem.image && insertItem.image.startsWith('data:image/')) {
       const fileName = `wardrobe-item-${id}-${Date.now()}.jpg`;
       
-      // Convert base64 to buffer
+      // Convert base64 to buffer and store in memory
       const base64Data = insertItem.image.split(',')[1];
       const buffer = Buffer.from(base64Data, 'base64');
-      
-      // Upload to Object Storage
-      await this.objectStorage.uploadFromBytes(fileName, buffer);
+      this.imageStorage.set(fileName, buffer);
       
       // Get the URL for the stored image
       imageUrl = `/api/images/${fileName}`;
@@ -185,13 +183,7 @@ export class MemStorage implements IStorage {
 
   // Image management
   async getImage(fileName: string): Promise<Buffer | null> {
-    try {
-      const data = await this.objectStorage.downloadAsBytes(fileName);
-      return Buffer.from(data);
-    } catch (error) {
-      console.error('Error retrieving image:', error);
-      return null;
-    }
+    return this.imageStorage.get(fileName) || null;
   }
 }
 
