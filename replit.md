@@ -86,6 +86,11 @@ The application follows a modern full-stack architecture with a clear separation
 
 ## Changelog
 - January 4, 2025. Enhanced categorization system with detailed color harmony rules
+  - Advanced outfit generator with uniqueness tracking
+  - Performance optimization with early stopping (max 4 unique outfits)
+  - Partial outfit support (missing optional items like socks/accessories)
+  - User preference integration for color and style prioritization
+  - Signature-based duplicate prevention using sorted item IDs
 - June 29, 2025. Initial setup
 
 ## User Preferences

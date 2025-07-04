@@ -194,75 +194,103 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
         return [];
     }
 
-    const itemsDescription = wardrobeItems.map(item => 
-        `${item.name} (${item.category}${item.subcategory ? `/${item.subcategory}` : ''}, colors: ${item.colors.join(', ')}, primary: ${item.primaryColor || 'N/A'}, occasions: ${item.occasions.join(', ')}, style: ${item.styleTags?.join(', ') || 'N/A'}, worn ${item.wearCount} times)`
-    ).join('\n');
+    // Use advanced local generator for better performance and control
+    const generator = new (await import('./utils/outfitGenerator')).OutfitGenerator(wardrobeItems);
+    
+    const outfitCandidates = generator.generateOutfits({
+        maxOutfits: 6,
+        occasion,
+        temperature,
+        allowPartialOutfits: true,
+        prioritizeUnworn: true,
+        userPreferences: {
+            favoriteColors: [], // Could be user-configurable
+            preferredStyles: ['casual', 'elegant']
+        }
+    });
 
-    let fullPrompt = `${OUTFIT_PROMPT}\n\nWardrobe items:\n${itemsDescription}`;
-
-    if (occasion) {
-        fullPrompt += `\n\nFOCUS OCCASION: ${occasion} - prioritize outfits suitable for this occasion`;
+    // Convert candidates to full recommendations with AI-generated styling details
+    const recommendations: OutfitRecommendation[] = [];
+    
+    for (const candidate of outfitCandidates.slice(0, 4)) {
+        try {
+            const stylingDetails = await generateStylingDetails(candidate, occasion, temperature);
+            
+            recommendations.push({
+                name: stylingDetails.name || `${candidate.spotlightItem.name} Look`,
+                items: candidate.items,
+                occasion: occasion || 'casual',
+                temperature: temperature || 'mild',
+                reasoning: stylingDetails.reasoning || `This outfit combines ${candidate.items.length} pieces with excellent color harmony, featuring ${candidate.spotlightItem.name} as the spotlight piece.`,
+                spotlightItem: candidate.spotlightItem,
+                styling: stylingDetails.styling || {
+                    description: `A ${candidate.items.length}-piece ensemble that balances comfort and style`,
+                    colorTips: `The ${candidate.spotlightItem.primaryColor || candidate.spotlightItem.colors[0]} tones create a cohesive look`,
+                    sizingTips: "Ensure proper fit for a polished appearance",
+                    alternatives: candidate.items.slice(1).map(item => item.name)
+                }
+            });
+        } catch (error) {
+            console.error("Error generating styling details for outfit:", error);
+            // Fallback to basic recommendation
+            recommendations.push({
+                name: `${candidate.spotlightItem.name} Look`,
+                items: candidate.items,
+                occasion: occasion || 'casual',
+                temperature: temperature || 'mild',
+                reasoning: `This outfit features ${candidate.items.length} carefully matched pieces with ${candidate.spotlightItem.name} as the centerpiece.`,
+                spotlightItem: candidate.spotlightItem,
+                styling: {
+                    description: `A stylish ${candidate.items.length}-piece combination`,
+                    colorTips: `Colors work harmoniously together`,
+                    sizingTips: "Ensure comfortable fit",
+                    alternatives: []
+                }
+            });
+        }
     }
 
-    if (temperature) {
-        fullPrompt += `\n\nPREFERRED TEMPERATURE: ${temperature} - focus on outfits for this temperature range`;
-    }
+    return recommendations;
+}
+
+// Helper function to generate AI styling details for specific outfits
+async function generateStylingDetails(candidate: any, occasion?: string, temperature?: string) {
+    const itemsList = candidate.items.map((item: WardrobeItem) => 
+        `${item.name} (${item.category}, ${item.colors.join('/')}, ${item.styleTags?.join('/') || 'casual'})`
+    ).join(', ');
+
+    const stylingPrompt = `Create styling details for this specific outfit combination:
+Items: ${itemsList}
+Spotlight piece: ${candidate.spotlightItem.name}
+Occasion: ${occasion || 'casual'}
+Temperature: ${temperature || 'mild'}
+
+Respond with JSON:
+{
+  "name": "creative outfit name (3-4 words)",
+  "reasoning": "why these specific items work together (focus on colors, textures, style harmony)",
+  "styling": {
+    "description": "detailed styling approach for this combination",
+    "colorTips": "specific color coordination advice for these pieces",
+    "sizingTips": "fit recommendations for this outfit",
+    "alternatives": ["alternative suggestions for similar looks"]
+  }
+}`;
 
     try {
-        const response: GenerateContentResponse = await ai.models.generateContent({
+        const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: { parts: [{ text: fullPrompt }] },
+            contents: { parts: [{ text: stylingPrompt }] },
             config: {
                 responseMimeType: "application/json",
             },
         });
 
-        let jsonStr = response.text?.trim() || "";
-        const fenceRegex = /^```(\w*)?\s*\n?(.*?)\n?\s*```$/;
-        const match = jsonStr.match(fenceRegex);
-        if (match && match[2]) {
-            jsonStr = match[2].trim();
-        }
-
-        const parsedData = JSON.parse(jsonStr);
-
-        if (parsedData && Array.isArray(parsedData.outfits)) {
-            // Map item names back to actual WardrobeItem objects
-            const outfits = parsedData.outfits.map((outfit: any) => {
-                const matchedItems = outfit.items.map((itemName: string) => 
-                    wardrobeItems.find(item => item.name.toLowerCase().includes(itemName.toLowerCase())) || 
-                    wardrobeItems.find(item => itemName.toLowerCase().includes(item.name.toLowerCase()))
-                ).filter(Boolean);
-
-                const spotlightItem = outfit.spotlightItem ? 
-                    wardrobeItems.find(item => item.name.toLowerCase().includes(outfit.spotlightItem.toLowerCase())) ||
-                    wardrobeItems.find(item => outfit.spotlightItem.toLowerCase().includes(item.name.toLowerCase()))
-                    : matchedItems[0];
-
-                return {
-                    name: outfit.name,
-                    occasion: outfit.occasion,
-                    temperature: outfit.temperature,
-                    reasoning: outfit.reasoning,
-                    items: matchedItems,
-                    spotlightItem: spotlightItem,
-                    styling: outfit.styling || {
-                        description: "Classic styling approach",
-                        colorTips: "Match similar tones",
-                        sizingTips: "Ensure proper fit",
-                        alternatives: []
-                    }
-                };
-            });
-
-            return outfits.filter((outfit: any) => outfit.items.length >= 3);
-        }
-
-        return [];
-
+        const jsonStr = response.text?.trim() || "";
+        return JSON.parse(jsonStr);
     } catch (error) {
-        console.error("Error generating outfit recommendations:", error);
-        throw new Error("Failed to generate outfit recommendations. Please try again.");
+        console.error("Error generating styling details:", error);
+        return null;
     }
 }
 
@@ -474,14 +502,46 @@ const WardrobeItemCard: React.FC<WardrobeItemCardProps> = ({ item, onDelete, onW
       />
       <div className="p-3">
         <h3 className="font-semibold text-sm text-gray-800 mb-1">{item.name}</h3>
-        <p className="text-xs text-gray-600 mb-1 capitalize">{item.category}</p>
+        <p className="text-xs text-gray-600 mb-1 capitalize">
+          {item.category}{item.subcategory ? ` • ${item.subcategory}` : ''}
+        </p>
+        
+        {/* Enhanced color display */}
         <div className="flex flex-wrap gap-1 mb-2">
-          {item.colors.map((color, index) => (
+          {item.primaryColor && (
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+              {item.primaryColor}
+            </span>
+          )}
+          {item.secondaryColor && (
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+              {item.secondaryColor}
+            </span>
+          )}
+          {item.colors.filter(color => color !== item.primaryColor && color !== item.secondaryColor).slice(0, 2).map((color, index) => (
             <span key={index} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
               {color}
             </span>
           ))}
         </div>
+
+        {/* Style tags */}
+        {item.styleTags && item.styleTags.length > 0 && (
+          <div className="mb-2">
+            <div className="flex flex-wrap gap-1">
+              {item.styleTags.slice(0, 3).map((tag, index) => (
+                <span key={index} className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full capitalize">
+                  {tag}
+                </span>
+              ))}
+              {item.layerable && (
+                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                  Layerable
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {item.occasions && item.occasions.length > 0 && (
           <div className="mb-2">
             <p className="text-xs text-gray-500 mb-1">Perfect for:</p>
@@ -630,14 +690,32 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
                 className="w-full h-20 object-cover rounded-lg mb-1 border"
               />
               <p className="text-xs text-gray-600 truncate font-medium">{item.name}</p>
-              <p className="text-xs text-gray-500 capitalize">{item.category}</p>
+              <p className="text-xs text-gray-500 capitalize">
+                {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
+              </p>
               <div className="flex flex-wrap gap-1 mt-1 justify-center">
-                {item.colors.slice(0, 2).map((color, colorIndex) => (
-                  <span key={colorIndex} className="text-xs bg-gray-200 text-gray-600 px-1 rounded">
-                    {color}
+                {item.primaryColor && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded font-medium">
+                    {item.primaryColor}
                   </span>
+                )}
+                {item.colors.slice(0, 1).map((color, colorIndex) => (
+                  color !== item.primaryColor && (
+                    <span key={colorIndex} className="text-xs bg-gray-200 text-gray-600 px-1 rounded">
+                      {color}
+                    </span>
+                  )
                 ))}
               </div>
+              {item.styleTags && item.styleTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1 justify-center">
+                  {item.styleTags.slice(0, 2).map((tag, tagIndex) => (
+                    <span key={tagIndex} className="text-xs bg-green-100 text-green-700 px-1 rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
