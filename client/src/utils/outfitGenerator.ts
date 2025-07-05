@@ -44,6 +44,23 @@ export class OutfitGenerator {
     this.items = items;
   }
 
+  private getAccessoryType(accessory: OutfitItem): string {
+    const name = accessory.name.toLowerCase();
+    const category = accessory.category.toLowerCase();
+    
+    if (name.includes('earring') || name.includes('ear')) return 'earrings';
+    if (name.includes('necklace') || name.includes('chain') || name.includes('pendant')) return 'necklace';
+    if (name.includes('bracelet') || name.includes('watch')) return 'bracelet';
+    if (name.includes('ring')) return 'ring';
+    if (name.includes('bag') || name.includes('purse') || name.includes('tote')) return 'bag';
+    if (name.includes('scarf') || name.includes('bandana')) return 'scarf';
+    if (name.includes('hat') || name.includes('cap') || name.includes('headband')) return 'headwear';
+    if (name.includes('belt')) return 'belt';
+    if (name.includes('sunglasses') || name.includes('glasses')) return 'eyewear';
+    
+    return category || 'accessory';
+  }
+
   generateOutfits(options: GenerationOptions = {}): OutfitCandidate[] {
     const {
       maxOutfits = 6,
@@ -94,12 +111,22 @@ export class OutfitGenerator {
         
         // Add socks if available (especially good with boots/closed shoes)
         if (socks.length > 0 && (shoe.name.toLowerCase().includes('boot') || shoe.name.toLowerCase().includes('shoe'))) {
-          outfitItems.push(socks[0]);
+          outfitItems.push(socks[Math.floor(Math.random() * socks.length)]);
         }
         
-        // Add an accessory if available
+        // Add multiple accessories for complete looks (jewelry, bags, scarves, etc.)
         if (accessories.length > 0) {
-          outfitItems.push(accessories[Math.floor(Math.random() * accessories.length)]);
+          const accessoryTypes = new Set();
+          const shuffledAccessories = [...accessories].sort(() => Math.random() - 0.5);
+          
+          for (const accessory of shuffledAccessories) {
+            const accessoryType = this.getAccessoryType(accessory);
+            // Allow multiple accessories of different types, up to 4 accessories
+            if (!accessoryTypes.has(accessoryType) && outfitItems.length < 8) {
+              outfitItems.push(accessory);
+              accessoryTypes.add(accessoryType);
+            }
+          }
         }
 
         candidates.push({
@@ -115,17 +142,24 @@ export class OutfitGenerator {
         for (let k = 0; k < Math.min(2, shoes.length); k++) {
           const outfitItems = [tops[i], bottoms[j], shoes[k]];
           
-          // Add socks if available and appropriate
-          if (socks.length > 0 && shoes[k].name.toLowerCase().includes('boot')) {
-            outfitItems.push(socks[0]);
+          // Add socks if available and appropriate (not just boots)
+          if (socks.length > 0 && (shoes[k].name.toLowerCase().includes('boot') || 
+              shoes[k].name.toLowerCase().includes('shoe') || 
+              shoes[k].name.toLowerCase().includes('sneaker'))) {
+            outfitItems.push(socks[Math.floor(Math.random() * socks.length)]);
           }
           
-          // Add accessories if available (1-2 accessories max)
+          // Add multiple accessories for complete looks
           if (accessories.length > 0) {
-            const numAccessories = Math.min(2, accessories.length);
-            for (let a = 0; a < numAccessories; a++) {
-              if (outfitItems.length < 6) { // Keep outfits reasonable size
-                outfitItems.push(accessories[a]);
+            const accessoryTypes = new Set();
+            const shuffledAccessories = [...accessories].sort(() => Math.random() - 0.5);
+            
+            for (const accessory of shuffledAccessories) {
+              const accessoryType = this.getAccessoryType(accessory);
+              // Allow multiple accessories of different types, up to 5 accessories
+              if (!accessoryTypes.has(accessoryType) && outfitItems.length < 8) {
+                outfitItems.push(accessory);
+                accessoryTypes.add(accessoryType);
               }
             }
           }
@@ -169,7 +203,7 @@ export function generateOutfitRecommendations(
     items: candidate.items,
     occasion,
     temperature,
-    reasoning: `A ${candidate.items.length}-piece outfit featuring ${candidate.spotlightItem.name} as the spotlight piece, ${candidate.items.length > 3 ? 'complete with accessories' : 'styled for comfort and elegance'}.`,
+    reasoning: `A ${candidate.items.length}-piece outfit featuring ${candidate.spotlightItem.name} as the spotlight piece, ${candidate.items.length > 4 ? 'complete with carefully selected accessories including jewelry, bags, and other styling elements' : 'styled for comfort and elegance'}.`,
     spotlightItem: candidate.spotlightItem
   }));
 }
