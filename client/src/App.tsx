@@ -1,8 +1,14 @@
+The code is modified to include local storage functionality, reset functionality, and integration with React Query for managing wardrobe data, as well as updated dependencies.
+```
+
+```replit_final_file
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { WardrobeItem, InsertWardrobeItem } from '@shared/schema';
+import { LocalStorageManager } from "@/lib/localStorage";
+import { useLocalStorageWardrobe } from "@/hooks/useLocalStorage";
 
 // --- TYPES ---
 interface OutfitRecommendation {
@@ -196,7 +202,7 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
 
     // Use advanced local generator for better performance and control
     const generator = new (await import('./utils/outfitGenerator')).OutfitGenerator(wardrobeItems);
-    
+
     const outfitCandidates = generator.generateOutfits({
         maxOutfits: 6,
         occasion,
@@ -211,11 +217,11 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
 
     // Convert candidates to full recommendations with AI-generated styling details
     const recommendations: OutfitRecommendation[] = [];
-    
+
     for (const candidate of outfitCandidates.slice(0, 4)) {
         try {
             const stylingDetails = await generateStylingDetails(candidate, occasion, temperature);
-            
+
             recommendations.push({
                 name: stylingDetails.name || `${candidate.spotlightItem.name} Look`,
                 items: candidate.items,
@@ -505,7 +511,7 @@ const WardrobeItemCard: React.FC<WardrobeItemCardProps> = ({ item, onDelete, onW
         <p className="text-xs text-gray-600 mb-1 capitalize">
           {item.category}{item.subcategory ? ` • ${item.subcategory}` : ''}
         </p>
-        
+
         {/* Enhanced color display */}
         <div className="flex flex-wrap gap-1 mb-2">
           {item.primaryColor && (
@@ -740,6 +746,8 @@ const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [outfitRecommendations, setOutfitRecommendations] = useState<OutfitRecommendation[]>([]);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
 
   const [showDuplicateDialog, setShowDuplicateDialog] = useState<boolean>(false);
   const [duplicateItems, setDuplicateItems] = useState<WardrobeItem[]>([]);
@@ -747,6 +755,7 @@ const App: React.FC = () => {
 
   const userId = 1; // Mock user ID for demo
   const queryClient = useQueryClient();
+    const { toast } = useToast()
 
   // Clear errors when state changes
   useEffect(() => {
@@ -800,6 +809,21 @@ const App: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['/api/wardrobe-items', userId] });
     }
   });
+
+  // Local storage integration
+  const localStorage = useLocalStorageWardrobe();
+
+  // Sync server data with localStorage on app load
+  useEffect(() => {
+    if (wardrobeItems && localStorage.isLoaded) {
+      // Save server items to localStorage
+      const itemsToStore = wardrobeItems.map(item => ({
+        ...item,
+        createdAt: new Date(item.createdAt)
+      }));
+      LocalStorageManager.saveWardrobeItems(itemsToStore);
+    }
+  }, [wardrobeItems, localStorage.isLoaded]);
 
   const handleTakePhoto = async (photo: string) => {
     setIsCameraOpen(false);
@@ -974,6 +998,32 @@ const App: React.FC = () => {
     setDuplicateItems([]);
     setIsAnalyzing(false);
     setAppState(AppState.Wardrobe);
+  };
+
+  const resetApp = () => {
+    setPhotos([]);
+    setRecommendations([]);
+    setError(null);
+    setIsCameraOpen(false);
+    setAppState(AppState.Welcome);
+  };
+
+  const clearAllData = () => {
+    // Clear localStorage
+    LocalStorageManager.clearAll();
+    localStorage.clearAll();
+
+    // Clear React Query cache
+    queryClient.clear();
+
+    // Show success message
+    toast({
+      title: "Data Cleared",
+      description: "All wardrobe items and outfits have been cleared from local storage.",
+    });
+
+    // Restart the app state
+    setAppState(AppState.Welcome);
   };
 
   const renderContent = () => {

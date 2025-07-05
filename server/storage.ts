@@ -52,6 +52,9 @@ export class MemStorage implements IStorage {
     this.currentWardrobeItemId = 1;
     this.currentOutfitId = 1;
     this.imageStorage = new Map();
+    
+    // Initialize with a default user
+    this.createUser({ username: "default_user" });
   }
 
   async getUser(id: number): Promise<User | undefined> {
