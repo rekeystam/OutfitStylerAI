@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -182,7 +183,7 @@ async function analyzeMultipleClothingItems(photo: string): Promise<AnalyzedItem
 
         const parsedData = JSON.parse(jsonStr);
         const items = parsedData.items || [];
-
+        
         return items.map((item: any) => ({
             name: item.name,
             category: item.category,
@@ -676,7 +677,7 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
       {showDetails && outfit.styling && (
         <div className="bg-gray-50 rounded-lg p-3 mb-3">
           <h4 className="font-semibold text-sm text-gray-800 mb-2">Styling Guide</h4>
-          <div className="space-y2 text-sm text-gray-600">
+          <div className="space-y-2 text-sm text-gray-600">
             <div>
               <strong>Description:</strong> {outfit.styling.description}
             </div>
@@ -851,58 +852,49 @@ const App: React.FC = () => {
       const analyzedItems = await analyzeMultipleClothingItems(photo);
       const photoHash = await hashPhoto(photo);
 
-      let addedItemsCount = 0;
-      let skippedItemsCount = 0;
-
       // Process each detected item individually
       for (const analyzedItem of analyzedItems) {
-        try {
-          const wardrobeItem: InsertWardrobeItem = {
-            userId,
-            name: analyzedItem.name,
-            category: analyzedItem.category,
-            subcategory: analyzedItem.subcategory,
-            colors: analyzedItem.colors,
-            primaryColor: analyzedItem.primaryColor,
-            secondaryColor: analyzedItem.secondaryColor,
-            image: photo,
-            photoHash,
-            style: analyzedItem.style,
-            styleTags: analyzedItem.styleTags || [],
-            wearCount: 0,
-            occasions: analyzedItem.occasions || [],
-            gender: "female",
-            layerable: analyzedItem.layerable || false,
-            versatility: analyzedItem.versatility,
-          };
+        const wardrobeItem: InsertWardrobeItem = {
+          userId,
+          name: analyzedItem.name,
+          category: analyzedItem.category,
+          subcategory: analyzedItem.subcategory,
+          colors: analyzedItem.colors,
+          primaryColor: analyzedItem.primaryColor,
+          secondaryColor: analyzedItem.secondaryColor,
+          image: photo,
+          photoHash,
+          style: analyzedItem.style,
+          styleTags: analyzedItem.styleTags || [],
+          wearCount: 0,
+          occasions: analyzedItem.occasions || [],
+          gender: "female",
+          layerable: analyzedItem.layerable || false,
+          versatility: analyzedItem.versatility,
+        };
 
-          const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
+        // Check for duplicates first
+        const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
 
-          if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
-            console.log(`Skipping duplicate item: ${analyzedItem.name}`);
-            skippedItemsCount++;
-            continue;
-          } else {
-            await new Promise<void>((resolve, reject) => {
-              addItemMutation.mutate(wardrobeItem, {
-                onSuccess: () => {
-                  addedItemsCount++;
-                  resolve();
-                },
-                onError: (error) => reject(error)
-              });
-            });
-          }
-        } catch (itemError) {
-          console.error(`Error processing item ${analyzedItem.name}:`, itemError);
+        if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
+          // For now, skip duplicates and continue with other items
+          console.log(`Skipping duplicate item: ${analyzedItem.name}`);
           continue;
+        } else {
+          // Add the item
+          await new Promise<void>((resolve, reject) => {
+            addItemMutation.mutate(wardrobeItem, {
+              onSuccess: () => resolve(),
+              onError: (error) => reject(error)
+            });
+          });
         }
       }
 
       // Show success message
       toast({
         title: "Items Added Successfully",
-        description: `${addedItemsCount} clothing item(s) have been added to your wardrobe. ${skippedItemsCount} items skipped due to duplicates.`,
+        description: `${analyzedItems.length} clothing item(s) have been added to your wardrobe.`,
       });
 
       setIsAnalyzing(false);
@@ -912,15 +904,6 @@ const App: React.FC = () => {
       setIsAnalyzing(false);
       setAppState(AppState.Error);
     }
-  };
-
-  const convertFileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -940,89 +923,69 @@ const App: React.FC = () => {
       setAppState(AppState.AddingItem);
       setIsAnalyzing(true);
 
-      let totalAddedItems = 0;
-      let totalSkippedItems = 0;
-      let totalDetectedItems = 0;
-
       for (const file of imageFiles) {
         try {
-          const base64 = await convertFileToBase64(file);
-          const analyzedItems = await analyzeMultipleClothingItems(base64);
-          const photoHash = await hashPhoto(base64);
+          const reader = new FileReader();
+          const photoPromise = new Promise<string>((resolve) => {
+            reader.onload = (e) => {
+              const result = e.target?.result;
+              if (result) {
+                resolve(result as string);
+              }
+            };
+          });
 
-          totalDetectedItems += analyzedItems.length;
-          let fileAddedItems = 0;
-          let fileSkippedItems = 0;
+          reader.readAsDataURL(file);
+          const photo = await photoPromise;
+
+          const analyzedItems = await analyzeMultipleClothingItems(photo);
+          const photoHash = await hashPhoto(photo);
 
           // Process each detected item individually
           for (const analyzedItem of analyzedItems) {
-            try {
-              const wardrobeItem: InsertWardrobeItem = {
-                userId,
-                name: analyzedItem.name,
-                category: analyzedItem.category,
-                subcategory: analyzedItem.subcategory,
-                colors: analyzedItem.colors,
-                primaryColor: analyzedItem.primaryColor,
-                secondaryColor: analyzedItem.secondaryColor,
-                image: base64,
-                photoHash,
-                style: analyzedItem.style,
-                styleTags: analyzedItem.styleTags || [],
-                wearCount: 0,
-                occasions: analyzedItem.occasions || [],
-                gender: "female",
-                layerable: analyzedItem.layerable || false,
-                versatility: analyzedItem.versatility,
-              };
+            const wardrobeItem: InsertWardrobeItem = {
+              userId,
+              name: analyzedItem.name,
+              category: analyzedItem.category,
+              subcategory: analyzedItem.subcategory,
+              colors: analyzedItem.colors,
+              primaryColor: analyzedItem.primaryColor,
+              secondaryColor: analyzedItem.secondaryColor,
+              image: photo,
+              photoHash,
+              style: analyzedItem.style,
+              styleTags: analyzedItem.styleTags || [],
+              wearCount: 0,
+              occasions: analyzedItem.occasions || [],
+              gender: "female",
+              layerable: analyzedItem.layerable || false,
+              versatility: analyzedItem.versatility,
+            };
 
-              const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
+            const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
 
-              if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
-                console.log(`Skipping duplicate item: ${analyzedItem.name}`);
-                fileSkippedItems++;
-                continue;
-              } else {
-                await new Promise<void>((resolve, reject) => {
-                  addItemMutation.mutate(wardrobeItem, {
-                    onSuccess: () => {
-                      fileAddedItems++;
-                      resolve();
-                    },
-                    onError: (error) => reject(error)
-                  });
-                });
-              }
-            } catch (itemError) {
-              console.error(`Error processing item ${analyzedItem.name}:`, itemError);
+            if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
+              // For now, skip duplicates and continue with other items
+              console.log(`Skipping duplicate item: ${analyzedItem.name}`);
               continue;
+            } else {
+              await new Promise<void>((resolve, reject) => {
+                addItemMutation.mutate(wardrobeItem, {
+                  onSuccess: () => resolve(),
+                  onError: (error) => reject(error)
+                });
+              });
             }
           }
-
-          totalAddedItems += fileAddedItems;
-          totalSkippedItems += fileSkippedItems;
-
-          console.log(`Processed ${file.name}: ${fileAddedItems} added, ${fileSkippedItems} skipped, ${analyzedItems.length} detected`);
         } catch (error) {
           console.error('Error processing file:', file.name, error);
         }
       }
 
-      // Show comprehensive success message
-      let batchMessage = "";
-      if (totalAddedItems > 0 && totalSkippedItems > 0) {
-        batchMessage = `Added ${totalAddedItems} new item(s), skipped ${totalSkippedItems} duplicate(s) from ${totalDetectedItems} detected item(s) across ${imageFiles.length} photo(s).`;
-      } else if (totalAddedItems > 0) {
-        batchMessage = `Successfully added ${totalAddedItems} clothing item(s) from ${totalDetectedItems} detected item(s) across ${imageFiles.length} photo(s).`;
-      } else if (totalSkippedItems > 0) {
-        batchMessage = `All ${totalSkippedItems} detected item(s) were duplicates and were skipped.`;
-      } else {
-        batchMessage = `No items could be processed from the ${imageFiles.length} photo(s).`;
-      }
-
+      // Show success message
       toast({
         title: "Photos Processed Successfully",
-        description: batchMessage,
+        description: `All photos have been analyzed and clothing items have been added to your wardrobe.`,
       });
 
       setIsAnalyzing(false);
