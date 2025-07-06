@@ -85,7 +85,13 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey });
 
-const ANALYZE_ITEM_PROMPT = `Analyze this clothing item image and provide the following information in JSON format:
+const ANALYZE_MULTIPLE_ITEMS_PROMPT = `Analyze this image and identify ALL separate clothing items visible. Return a JSON array with detailed information for each individual item.
+
+IMPORTANT: Identify each separate clothing item individually, not as a group. If you see multiple items in one photo, create separate entries for each one.
+
+Return JSON format:
+{
+  "items": [
     {
       "name": "specific item name (e.g., 'Navy Blue Cotton T-Shirt')",
       "category": "main category: tops, bottoms, dresses, shoes, socks, accessories",
@@ -99,15 +105,18 @@ const ANALYZE_ITEM_PROMPT = `Analyze this clothing item image and provide the fo
       "layerable": true/false,
       "style": "detailed style description including material, cut, design details"
     }
+  ]
+}
 
-    CATEGORIZATION RULES:
-    - Use exact category names: tops, bottoms, dresses, shoes, socks, accessories
-    - For subcategories, be specific: shirts (button-up), t-shirts (casual tees), blouses (dressy tops), etc.
-    - Primary color should be the most dominant color, secondary is accent/trim color
-    - Style tags should include 2-4 descriptors from: casual, formal, sporty, elegant, bohemian, vintage, modern, minimalist
-    - Occasions from: date, work, party, casual, formal, weekend, sports, travel
-    - Layerable means can be worn with other pieces (cardigans, vests, jackets = true, dresses = false)
-    - Focus on female clothing for now`;
+CATEGORIZATION RULES:
+- Use exact category names: tops, bottoms, dresses, shoes, socks, accessories
+- For subcategories, be specific: shirts (button-up), t-shirts (casual tees), blouses (dressy tops), etc.
+- Primary color should be the most dominant color, secondary is accent/trim color
+- Style tags should include 2-4 descriptors from: casual, formal, sporty, elegant, bohemian, vintage, modern, minimalist
+- Occasions from: date, work, party, casual, formal, weekend, sports, travel
+- Layerable means can be worn with other pieces (cardigans, vests, jackets = true, dresses = false)
+- Focus on female clothing for now
+- EXTRACT EACH ITEM SEPARATELY - if you see 4 clothing items, return 4 separate entries`;
 
 const OUTFIT_PROMPT = `You are a professional fashion stylist specializing in female fashion. Generate outfits following these enhanced requirements:
 
@@ -148,7 +157,7 @@ Respond with JSON: {"outfits": [{"name": "creative outfit name", "occasion": "oc
 Temperature ranges: warm, mild, cool, cold
 Occasions: casual, work, formal, party, date, weekend, travel, seasonal`;
 
-async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
+async function analyzeMultipleClothingItems(photo: string): Promise<AnalyzedItem[]> {
     const imagePart = {
         inlineData: {
             mimeType: 'image/jpeg',
@@ -159,7 +168,7 @@ async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: { parts: [{ text: ANALYZE_ITEM_PROMPT }, imagePart] },
+            contents: { parts: [{ text: ANALYZE_MULTIPLE_ITEMS_PROMPT }, imagePart] },
             config: {
                 responseMimeType: "application/json",
             },
@@ -173,24 +182,35 @@ async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
         }
 
         const parsedData = JSON.parse(jsonStr);
-        return {
-            name: parsedData.name,
-            category: parsedData.category,
-            subcategory: parsedData.subcategory,
-            colors: parsedData.colors,
-            primaryColor: parsedData.primaryColor,
-            secondaryColor: parsedData.secondaryColor,
-            styleTags: parsedData.styleTags || [],
-            occasions: parsedData.occasions || [],
-            versatility: parsedData.versatility || "",
-            layerable: parsedData.layerable || false,
-            style: parsedData.style || ""
-        } as AnalyzedItem;
+        const items = parsedData.items || [];
+        
+        return items.map((item: any) => ({
+            name: item.name,
+            category: item.category,
+            subcategory: item.subcategory,
+            colors: item.colors || [],
+            primaryColor: item.primaryColor,
+            secondaryColor: item.secondaryColor,
+            styleTags: item.styleTags || [],
+            occasions: item.occasions || [],
+            versatility: item.versatility || "",
+            layerable: item.layerable || false,
+            style: item.style || ""
+        })) as AnalyzedItem[];
 
     } catch (error) {
-        console.error("Error analyzing item:", error);
-        throw new Error("Failed to analyze clothing item. Please try again.");
+        console.error("Error analyzing items:", error);
+        throw new Error("Failed to analyze clothing items. Please try again.");
     }
+}
+
+async function analyzeClothingItem(photo: string): Promise<AnalyzedItem> {
+    // Use the multiple items function and return the first item for backwards compatibility
+    const items = await analyzeMultipleClothingItems(photo);
+    if (items.length === 0) {
+        throw new Error("No clothing items found in the image");
+    }
+    return items[0];
 }
 
 async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occasion?: string, temperature?: string): Promise<OutfitRecommendation[]> {
@@ -829,41 +849,58 @@ const App: React.FC = () => {
     setAppState(AppState.AddingItem);
 
     try {
-      const analyzedItem = await analyzeClothingItem(photo);
+      const analyzedItems = await analyzeMultipleClothingItems(photo);
       const photoHash = await hashPhoto(photo);
 
-      const wardrobeItem: InsertWardrobeItem = {
-        userId,
-        name: analyzedItem.name,
-        category: analyzedItem.category,
-        subcategory: analyzedItem.subcategory,
-        colors: analyzedItem.colors,
-        primaryColor: analyzedItem.primaryColor,
-        secondaryColor: analyzedItem.secondaryColor,
-        image: photo,
-        photoHash,
-        style: analyzedItem.style,
-        styleTags: analyzedItem.styleTags || [],
-        wearCount: 0,
-        occasions: analyzedItem.occasions || [],
-        gender: "female",
-        layerable: analyzedItem.layerable || false,
-        versatility: analyzedItem.versatility,
-      };
+      // Process each detected item individually
+      for (const analyzedItem of analyzedItems) {
+        const wardrobeItem: InsertWardrobeItem = {
+          userId,
+          name: analyzedItem.name,
+          category: analyzedItem.category,
+          subcategory: analyzedItem.subcategory,
+          colors: analyzedItem.colors,
+          primaryColor: analyzedItem.primaryColor,
+          secondaryColor: analyzedItem.secondaryColor,
+          image: photo,
+          photoHash,
+          style: analyzedItem.style,
+          styleTags: analyzedItem.styleTags || [],
+          wearCount: 0,
+          occasions: analyzedItem.occasions || [],
+          gender: "female",
+          layerable: analyzedItem.layerable || false,
+          versatility: analyzedItem.versatility,
+        };
 
-      // Check for duplicates first
-      const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
+        // Check for duplicates first
+        const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
 
-      if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
-        setDuplicateItems(duplicateResponse.duplicates);
-        setPendingItem(wardrobeItem);
-        setShowDuplicateDialog(true);
-        setIsAnalyzing(false);
-      } else {
-        addItemMutation.mutate(wardrobeItem);
+        if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
+          // For now, skip duplicates and continue with other items
+          console.log(`Skipping duplicate item: ${analyzedItem.name}`);
+          continue;
+        } else {
+          // Add the item
+          await new Promise<void>((resolve, reject) => {
+            addItemMutation.mutate(wardrobeItem, {
+              onSuccess: () => resolve(),
+              onError: (error) => reject(error)
+            });
+          });
+        }
       }
+
+      // Show success message
+      toast({
+        title: "Items Added Successfully",
+        description: `${analyzedItems.length} clothing item(s) have been added to your wardrobe.`,
+      });
+
+      setIsAnalyzing(false);
+      setAppState(AppState.Wardrobe);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to analyze item');
+      setError(error instanceof Error ? error.message : 'Failed to analyze items');
       setIsAnalyzing(false);
       setAppState(AppState.Error);
     }
@@ -901,41 +938,55 @@ const App: React.FC = () => {
           reader.readAsDataURL(file);
           const photo = await photoPromise;
 
-          const analyzedItem = await analyzeClothingItem(photo);
+          const analyzedItems = await analyzeMultipleClothingItems(photo);
           const photoHash = await hashPhoto(photo);
 
-          const wardrobeItem: InsertWardrobeItem = {
-            userId,
-            name: analyzedItem.name,
-            category: analyzedItem.category,
-            colors: analyzedItem.colors,
-            image: photo,
-            photoHash,
-            style: analyzedItem.style,
-            wearCount: 0,
-            occasions: analyzedItem.occasions || [],
-          };
+          // Process each detected item individually
+          for (const analyzedItem of analyzedItems) {
+            const wardrobeItem: InsertWardrobeItem = {
+              userId,
+              name: analyzedItem.name,
+              category: analyzedItem.category,
+              subcategory: analyzedItem.subcategory,
+              colors: analyzedItem.colors,
+              primaryColor: analyzedItem.primaryColor,
+              secondaryColor: analyzedItem.secondaryColor,
+              image: photo,
+              photoHash,
+              style: analyzedItem.style,
+              styleTags: analyzedItem.styleTags || [],
+              wearCount: 0,
+              occasions: analyzedItem.occasions || [],
+              gender: "female",
+              layerable: analyzedItem.layerable || false,
+              versatility: analyzedItem.versatility,
+            };
 
-          const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
+            const duplicateResponse = await apiRequest('/api/wardrobe-items/check-duplicates', 'POST', wardrobeItem);
 
-          if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
-            setDuplicateItems(duplicateResponse.duplicates);
-            setPendingItem(wardrobeItem);
-            setShowDuplicateDialog(true);
-            setIsAnalyzing(false);
-          } else {
-
-            await new Promise<void>((resolve, reject) => {
-              addItemMutation.mutate(wardrobeItem, {
-                onSuccess: () => resolve(),
-                onError: (error) => reject(error)
+            if (duplicateResponse.duplicates && duplicateResponse.duplicates.length > 0) {
+              // For now, skip duplicates and continue with other items
+              console.log(`Skipping duplicate item: ${analyzedItem.name}`);
+              continue;
+            } else {
+              await new Promise<void>((resolve, reject) => {
+                addItemMutation.mutate(wardrobeItem, {
+                  onSuccess: () => resolve(),
+                  onError: (error) => reject(error)
+                });
               });
-            });
+            }
           }
         } catch (error) {
           console.error('Error processing file:', file.name, error);
         }
       }
+
+      // Show success message
+      toast({
+        title: "Photos Processed Successfully",
+        description: `All photos have been analyzed and clothing items have been added to your wardrobe.`,
+      });
 
       setIsAnalyzing(false);
       setAppState(AppState.Wardrobe);
