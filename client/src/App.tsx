@@ -676,7 +676,7 @@ const OutfitCard: React.FC<OutfitCardProps> = ({ outfit, onWearOutfit }) => {
       {showDetails && outfit.styling && (
         <div className="bg-gray-50 rounded-lg p-3 mb-3">
           <h4 className="font-semibold text-sm text-gray-800 mb-2">Styling Guide</h4>
-          <div className="space-y-2 text-sm text-gray-600">
+          <div className="space-y2 text-sm text-gray-600">
             <div>
               <strong>Description:</strong> {outfit.styling.description}
             </div>
