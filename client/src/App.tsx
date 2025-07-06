@@ -1,7 +1,4 @@
-The code is modified to include local storage functionality, reset functionality, and integration with React Query for managing wardrobe data, as well as updated dependencies.
-```
 
-```replit_final_file
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +6,7 @@ import { apiRequest } from '@/lib/queryClient';
 import type { WardrobeItem, InsertWardrobeItem } from '@shared/schema';
 import { LocalStorageManager } from "@/lib/localStorage";
 import { useLocalStorageWardrobe } from "@/hooks/useLocalStorage";
+import { useToast } from "@/hooks/use-toast";
 
 // --- TYPES ---
 interface OutfitRecommendation {
@@ -755,7 +753,7 @@ const App: React.FC = () => {
 
   const userId = 1; // Mock user ID for demo
   const queryClient = useQueryClient();
-    const { toast } = useToast()
+  const { toast } = useToast();
 
   // Clear errors when state changes
   useEffect(() => {
