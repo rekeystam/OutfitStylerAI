@@ -320,7 +320,7 @@ const Header: React.FC<HeaderProps> = ({ onReset }) => {
       <div className="flex justify-between items-center p-4">
         <div className="flex items-center space-x-2">
           <SparklesIcon className="w-8 h-8 text-indigo-500" />
-          <h1 className="text-xl font-bold text-gray-800">AI Outfit Recommender</h1>
+          <h1 className="text-xl font-bold text-gray-800">Smart Wardrobe</h1>
         </div>
         <button onClick={onReset} className="text-sm text-gray-500 hover:text-indigo-600">
           Start Over
@@ -1060,7 +1060,7 @@ const App: React.FC = () => {
                 <SparklesIcon className="w-16 h-16 text-indigo-500" />
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Welcome to Your AI Wardrobe</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Welcome to Your Smart Wardrobe</h2>
             <p className="text-gray-600 mb-8 leading-relaxed">
               Build your digital wardrobe and get personalized outfit recommendations for any occasion!
             </p>

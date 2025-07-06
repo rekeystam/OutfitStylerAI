@@ -1,8 +1,8 @@
-# AI Outfit Recommender
+# Smart Wardrobe
 
 ## Overview
 
-This is a full-stack web application that provides AI-powered outfit recommendations by analyzing photos of clothing items. Users can take or upload photos of their wardrobe, and the application uses Google's Gemini AI to identify clothing items and suggest stylish outfit combinations.
+This is a full-stack web application that helps users organize their wardrobe and provides AI-powered outfit recommendations by analyzing photos of clothing items. Users can take or upload photos of their wardrobe, and the application uses Google's Gemini AI to identify clothing items and suggest stylish outfit combinations.
 
 ## System Architecture
 
@@ -85,6 +85,11 @@ The application follows a modern full-stack architecture with a clear separation
   - Configured for PostgreSQL dialect
 
 ## Changelog
+- January 6, 2025. Rebranded application from "AI Outfit Recommender" to "Smart Wardrobe"
+  - Updated app title, header, and welcome message
+  - Enhanced multiple item detection to analyze each clothing piece separately
+  - Fixed outfit generation functionality with improved AI integration
+  - Added comprehensive error handling and success messaging
 - January 4, 2025. Enhanced categorization system with detailed color harmony rules
   - Advanced outfit generator with uniqueness tracking
   - Performance optimization with early stopping (max 4 unique outfits)
