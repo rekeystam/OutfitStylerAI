@@ -218,105 +218,80 @@ async function generateOutfitRecommendations(wardrobeItems: WardrobeItem[], occa
         return [];
     }
 
-    // Use advanced local generator for better performance and control
-    const generator = new (await import('./utils/outfitGenerator')).OutfitGenerator(wardrobeItems);
+    // Use AI to generate outfit recommendations
+    const itemsDescription = wardrobeItems.map(item => 
+        `${item.name} (${item.category}) - ${item.primaryColor || item.colors[0]} - ${item.style || 'casual'}`
+    ).join('\n');
 
-    const outfitCandidates = generator.generateOutfits({
-        maxOutfits: 6,
-        occasion,
-        temperature,
-        allowPartialOutfits: true,
-        prioritizeUnworn: true,
-        userPreferences: {
-            favoriteColors: [], // Could be user-configurable
-            preferredStyles: ['casual', 'elegant']
-        }
-    });
+    const prompt = `${OUTFIT_PROMPT}
 
-    // Convert candidates to full recommendations with AI-generated styling details
-    const recommendations: OutfitRecommendation[] = [];
+Available wardrobe items:
+${itemsDescription}
 
-    for (const candidate of outfitCandidates.slice(0, 4)) {
-        try {
-            const stylingDetails = await generateStylingDetails(candidate, occasion, temperature);
+Generate outfit recommendations for:
+${occasion ? `Occasion: ${occasion}` : 'Occasion: casual'}
+${temperature ? `Temperature: ${temperature}` : 'Temperature: mild'}
 
-            recommendations.push({
-                name: stylingDetails.name || `${candidate.spotlightItem.name} Look`,
-                items: candidate.items,
-                occasion: occasion || 'casual',
-                temperature: temperature || 'mild',
-                reasoning: stylingDetails.reasoning || `This outfit combines ${candidate.items.length} pieces with excellent color harmony, featuring ${candidate.spotlightItem.name} as the spotlight piece.`,
-                spotlightItem: candidate.spotlightItem,
-                styling: stylingDetails.styling || {
-                    description: `A ${candidate.items.length}-piece ensemble that balances comfort and style`,
-                    colorTips: `The ${candidate.spotlightItem.primaryColor || candidate.spotlightItem.colors[0]} tones create a cohesive look`,
-                    sizingTips: "Ensure proper fit for a polished appearance",
-                    alternatives: candidate.items.slice(1).map(item => item.name)
-                }
-            });
-        } catch (error) {
-            console.error("Error generating styling details for outfit:", error);
-            // Fallback to basic recommendation
-            recommendations.push({
-                name: `${candidate.spotlightItem.name} Look`,
-                items: candidate.items,
-                occasion: occasion || 'casual',
-                temperature: temperature || 'mild',
-                reasoning: `This outfit features ${candidate.items.length} carefully matched pieces with ${candidate.spotlightItem.name} as the centerpiece.`,
-                spotlightItem: candidate.spotlightItem,
-                styling: {
-                    description: `A stylish ${candidate.items.length}-piece combination`,
-                    colorTips: `Colors work harmoniously together`,
-                    sizingTips: "Ensure comfortable fit",
-                    alternatives: []
-                }
-            });
-        }
-    }
-
-    return recommendations;
-}
-
-// Helper function to generate AI styling details for specific outfits
-async function generateStylingDetails(candidate: any, occasion?: string, temperature?: string) {
-    const itemsList = candidate.items.map((item: WardrobeItem) => 
-        `${item.name} (${item.category}, ${item.colors.join('/')}, ${item.styleTags?.join('/') || 'casual'})`
-    ).join(', ');
-
-    const stylingPrompt = `Create styling details for this specific outfit combination:
-Items: ${itemsList}
-Spotlight piece: ${candidate.spotlightItem.name}
-Occasion: ${occasion || 'casual'}
-Temperature: ${temperature || 'mild'}
-
-Respond with JSON:
-{
-  "name": "creative outfit name (3-4 words)",
-  "reasoning": "why these specific items work together (focus on colors, textures, style harmony)",
-  "styling": {
-    "description": "detailed styling approach for this combination",
-    "colorTips": "specific color coordination advice for these pieces",
-    "sizingTips": "fit recommendations for this outfit",
-    "alternatives": ["alternative suggestions for similar looks"]
-  }
-}`;
+Create 3-4 complete outfit combinations using ONLY the items listed above. Each outfit should have a top, bottom, and shoes at minimum.`;
 
     try {
-        const response = await ai.models.generateContent({
+        const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: { parts: [{ text: stylingPrompt }] },
+            contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",
             },
         });
 
-        const jsonStr = response.text?.trim() || "";
-        return JSON.parse(jsonStr);
+        let jsonStr = response.text?.trim() || "";
+        const fenceRegex = /^```(\w*)?\s*\n?(.*?)\n?\s*```$/;
+        const match = jsonStr.match(fenceRegex);
+        if (match && match[2]) {
+            jsonStr = match[2].trim();
+        }
+
+        const parsedData = JSON.parse(jsonStr);
+        const outfits = parsedData.outfits || [];
+
+        return outfits.map((outfit: any) => {
+            // Find matching items from wardrobe
+            const matchedItems = outfit.items.map((itemName: string) => {
+                return wardrobeItems.find(item => 
+                    item.name.toLowerCase().includes(itemName.toLowerCase()) ||
+                    itemName.toLowerCase().includes(item.name.toLowerCase())
+                );
+            }).filter(Boolean);
+
+            const spotlightItem = matchedItems.find(item => 
+                item && outfit.spotlightItem && (
+                    item.name.toLowerCase().includes(outfit.spotlightItem.toLowerCase()) ||
+                    outfit.spotlightItem.toLowerCase().includes(item.name.toLowerCase())
+                )
+            ) || matchedItems[0];
+
+            return {
+                name: outfit.name || 'Stylish Outfit',
+                items: matchedItems,
+                occasion: outfit.occasion || occasion || 'casual',
+                temperature: outfit.temperature || temperature || 'mild',
+                reasoning: outfit.reasoning || 'A well-coordinated outfit with great color harmony.',
+                spotlightItem,
+                styling: outfit.styling || {
+                    description: 'A stylish and comfortable combination',
+                    colorTips: 'Colors work well together',
+                    sizingTips: 'Ensure proper fit',
+                    alternatives: []
+                }
+            };
+        }).filter((outfit: OutfitRecommendation) => outfit.items.length >= 2);
+
     } catch (error) {
-        console.error("Error generating styling details:", error);
-        return null;
+        console.error("Error generating outfit recommendations:", error);
+        throw new Error("Failed to generate outfit recommendations. Please try again.");
     }
 }
+
+
 
 // Utility functions
 
